@@ -17,14 +17,14 @@ Features
 Usage
 -------------
 Implementing a single Stan program with the features listed above that would simultaneously support arbitratory hierarchical experiment designs without making the use of the code extremely cumbersome and complicated is difficult.
-Therefore, we have made available two different implementations supporting the common two- and three-level hierarchical experimental designs
+Therefore, we have made available two different implementations (see the directories `human` and `mouse`) supporting the common two- and three-level hierarchical experimental designs
 
 ![Two-level hierarchical model](https://raw.githubusercontent.com/tare/Splotch/master/images/two-level_hierarchical_model.png)
 ![Three-level hierarchical model](https://raw.githubusercontent.com/tare/Splotch/master/images/three-level_hierarchical_model.png)
 
-Additionally, these two implementations can be easily modified to support other experimental designs.
+These two implementations can be easily modified to support other experimental designs.
 
-Alternatively, we could write a Stan code generator, in the same way as in RStanArm [3], that would generate the Stan code automatically based on the experimental design description.
+Alternatively, we could write a Stan code generator, in the same way as in RStanArm [3], that would generate the approriate Stan code automatically based on the experimental design description.
 
 
 ### References
