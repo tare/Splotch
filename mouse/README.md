@@ -110,6 +110,7 @@ Naturally, the order of elements in ``counts``, ``size_factors``, and ``D`` has 
 
 Each considered spot has been linked to exactly to one anatomical annotation region. 
 This information is encoded in ``D`` using the following coding
+
 | Anatomical annotion region | Identifier |
 |----------------------------|------------|
 | Ventral medial white       | 1          |
@@ -129,6 +130,7 @@ For instance, if the 154<sup>th</sup> spot has been annotated to be in ventral h
 Next we will cover how ``mouse_mapping`` and ``tissue_mapping`` have been constructed.
 Each mouse has a combination of genotype, time point, and sex associated with it.
 To incorporate that information into the model, we use ``mouse_mapping`` and the following mapping
+
 | Genotype   | Time point | Sex    | Identifier |
 |------------|------------|--------|------------|
 | SOD1-WT    | P30        | Male   | 1          |
@@ -167,6 +169,7 @@ Note that in our implementation, in addition to ``W`` and ``W_n``, we supply ``W
 Output variables
 -------------
 Most of the users are interested in the following output variables
+
 | Output variable           | Type                 | Dimensions                           | Description                              |
 |---------------------------|----------------------|--------------------------------------|------------------------------------------|
 | ``lambda``                    | positive real        | Σ``N_spots``                         | Rate parameter for each spot             |
@@ -180,6 +183,7 @@ Most of the users are interested in the following output variables
 The order of elements in ``lambda`` corresponds to the order of the spots in ``counts``.
 
 The mapping from the rows of ``beta_genotype_timepoint`` to the genotype and time point is given in the following table
+
 | Genotype   | Time point | Row index |
 |------------|------------|------------|
 | SOD1-WT    | P30        | 1          |
@@ -194,6 +198,7 @@ The mapping from the rows of ``beta_genotype_timepoint`` to the genotype and tim
 | *Atg7* cKO | P120       | 10         |
 
 Whereas, the mapping from the rows of ``beta_sex`` to the genotype, time point, and sex is given in the following table
+
 | Genotype   | Time point | Sex    | Row index |
 |------------|------------|--------|------------|
 | SOD1-WT    | P30        | Male   | 1          |
@@ -220,6 +225,7 @@ Whereas, the mapping from the rows of ``beta_sex`` to the genotype, time point, 
 The order of the rows of ``beta_mouse`` matches with order of mice used in ``mouse_mapping``.
 
 The mapping from the columns of ``beta_genotype_timepoint``, ``beta_sex``, and ``beta_mouse`` to the AARs is given in the following table
+
 | Anatomical annotion region | Column index |
 |----------------------------|------------|
 | Ventral medial white       | 1          |

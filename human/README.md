@@ -102,6 +102,7 @@ Naturally, the order of elements in ``counts``, ``size_factors``, and ``D`` has 
 
 Each considered spot has been linked to exactly to one anatomical annotation region. 
 This information is encoded in ``D`` using the following coding
+
 | Anatomical annotion region | Identifier |
 |----------------------------|------------|
 | Ventral medial white       | 1          |
@@ -122,6 +123,7 @@ Next we will cover how ``donor_mapping`` and ``tissue_mapping`` have been constr
 Each donor sample is associated with an onset location and a tissue location.
 As described above, we have two onset locations (lumbar and bulbar) and two tissue locations (lumbar and cervical).
 To incorporate this information into the model through ``donor_mapping``, we use the following mapping
+
 | Onset location   | Tissue location |  Identifier |
 |------------------|-----------------|-------------|
 | Lumbar onset     | Lumbar          | 1           |
@@ -134,6 +136,7 @@ Note that the order of the donors in ``donor_mapping`` is arbitratory but it wil
 
 Similarly, each tissue section has been taken from one of the ``N_donors`` donors. 
 This information is incorporated into the model through ``tissue_mapping`` by linking the tissue sections to donors and and sampling locations
+
 | Donor identifier | Onset location | Tissue location | Identifier |
 |------------|------------------|-----------------|-----------|
 | D1 | Lumbar | Lumbar   | 1 |
@@ -171,6 +174,7 @@ Most of the users are interested in the following output variables
 The order of elements in ``lambda`` corresponds to the order of the spots in ``counts``.
 
 The mapping from the rows of ``beta_onset_tissue`` to the onset and tissue location is given in the following table
+
 | Onset location   | Tissue location |  Row index |
 |------------------|-----------------|------------|
 | Lumbar onset     | Lumbar          | 1          |
@@ -179,6 +183,7 @@ The mapping from the rows of ``beta_onset_tissue`` to the onset and tissue locat
 | Bulbar onset     | Lumbar          | 4          |
 
 Whereas, the mapping from the rows of ``beta_donor_onset_tissue`` to the donor and tissue location is given in the following table
+
 | Donor identifier | Onset location | Tissue location | Row index |
 |------------|------------------|-----------------|-----------|
 | D1 | Lumbar | Lumbar   | 1 |
@@ -194,6 +199,7 @@ Whereas, the mapping from the rows of ``beta_donor_onset_tissue`` to the donor a
 | D6 | Bulbar | Lumbar | 11 |
 
 The mapping from the columns of ``beta_onset_tissue`` and ``beta_donor_onset_tissue`` to the AARs is given in the following table
+
 | Anatomical annotion region | Column index |
 |----------------------------|------------|
 | Ventral medial white       | 1          |
