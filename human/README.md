@@ -162,6 +162,7 @@ Note that in our implementation, in addition to ``W`` and ``W_n``, we supply ``W
 Output variables
 -------------
 Most of the users are interested in the following output variables
+
 | Output variable           | Type                 | Dimensions                           | Description                              |
 |---------------------------|----------------------|--------------------------------------|------------------------------------------|
 | ``lambda``                    | positive real        | Σ``N_spots``                         | Rate parameter for each spot             |
