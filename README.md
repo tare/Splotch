@@ -8,7 +8,7 @@ Splotch is a hierarchical generative probabilistic model for analyzing spatial t
 Features
 -------------
 - Supports complex hierarchical experimental designs and model-based analysis of replicates
-- Full Bayesian inference with Hamiltonian Monte Carlo (HMC) using the N-U-Turn sampler (NUTS) implemented in **Stan** [2]
+- Full Bayesian inference with Hamiltonian Monte Carlo (HMC) using the adaptive HMC sampler as implemented in **Stan** [2]
 - Analysis of expression differences between anatomical regions and conditions using posterior samples
 - Different anatomical annotated regions are modelled using a linear model
 - Zero-inflated Poisson likelihood for counts
