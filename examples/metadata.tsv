@@ -1,0 +1,11 @@
+Name	Level 3	Level 1	Level 2	Count file	Annotation file	Image file
+L7CN36_C1	1394	G93A p120	F	examples/Count_Tables/L7CN36_C1_stdata_aligned_counts_IDs.txt.unified.tsv	examples/Annotations/L7CN36_C1.tsv	examples/Images/L7CN36_C1_HE.jpg
+L7CN36_C2	1394	G93A p120	F	examples/Count_Tables/L7CN36_C2_stdata_aligned_counts_IDs.txt.unified.tsv	examples/Annotations/L7CN36_C2.tsv	examples/Images/L7CN36_C2_HE.jpg
+L7CN30_C1	2967	WT p120	M	examples/Count_Tables/L7CN30_C1_stdata_aligned_counts_IDs.txt.unified.tsv	examples/Annotations/L7CN30_C1.tsv	examples/Images/L7CN30_C1_HE.jpg
+L7CN30_C2	2967	WT p120	M	examples/Count_Tables/L7CN30_C2_stdata_aligned_counts_IDs.txt.unified.tsv	examples/Annotations/L7CN30_C2.tsv	examples/Images/L7CN30_C2_HE.jpg
+L7CN69_D1	1310	WT p120	M	examples/Count_Tables/L7CN69_D1_stdata_aligned_counts_IDs.txt.unified.tsv	examples/Annotations/L7CN69_D1.tsv	examples/Images/L7CN69_D1_HE.jpg
+L7CN69_D2	1310	WT p120	M	examples/Count_Tables/L7CN69_D2_stdata_aligned_counts_IDs.txt.unified.tsv	examples/Annotations/L7CN69_D2.tsv	examples/Images/L7CN69_D2_HE.jpg
+CN96_E1	1040	WT p120	F	examples/Count_Tables/CN96_E1_stdata_aligned_counts_IDs.txt.unified.tsv	examples/Annotations/CN96_E1.tsv	examples/Images/CN96_E1_HE.jpg
+CN96_E2	1040	WT p120	F	examples/Count_Tables/CN96_E2_stdata_aligned_counts_IDs.txt.unified.tsv	examples/Annotations/CN96_E2.tsv	examples/Images/CN96_E2_HE.jpg
+CN93_E1	975	G93A p120	M	examples/Count_Tables/CN93_E1_stdata_aligned_counts_IDs.txt.unified.tsv	examples/Annotations/CN93_E1.tsv	examples/Images/CN93_E1_HE.jpg
+CN93_E2	975	G93A p120	M	examples/Count_Tables/CN93_E2_stdata_aligned_counts_IDs.txt.unified.tsv	examples/Annotations/CN93_E2.tsv	examples/Images/CN93_E2_HE.jpg
