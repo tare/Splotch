@@ -32,8 +32,8 @@ Splotch has been tested on Mac and Linux. It has not been tested on Windows.
 
 The following command installs the Splotch Python module and compiles the Stan model in one go
 ```console
-$ pip install git+ssh://git@github.com/tare/Splotch.git
-$ pip install --no-deps --force-reinstall --upgrade --install-option="--stan" git+ssh://git@github.com/tare/Splotch.git
+$ pip install git+https://git@github.com/tare/Splotch.git
+$ pip install --no-deps --force-reinstall --upgrade --install-option="--stan" git+https://git@github.com/tare/Splotch.git
 ```
 
 First, the installation script downloads the latest version of [CmdStan](https://mc-stan.org/users/interfaces/cmdstan) and compiles it. Second, the installation script uses the CmdStan installation to compile the Stan model.
@@ -70,7 +70,7 @@ The second installation method installs Splotch and compiles the Stan model in s
 #### Installing Splotch without compiling the Stan models
 The Splotch Python module can be installed without compiling the Stan models as follows
 ```console
-$ pip install git+ssh://git@github.com/tare/Splotch.git
+$ pip install git+https://git@github.com/tare/Splotch.git
 ```
 
 As a result of this, the user will have the executables ``splotch``, ``splotch_prepare_count_files``, and ``splotch_generate_input_files``
