@@ -493,16 +493,19 @@ def get_tissue_sections(count_files,metadata,minimum_sequencing_depth=100.0,maxi
             
   return data,aar_names
 
-def registration_individuals(x,y,aar_names,max_iter=10000):
+def registration_individuals(x,y,aar_names,max_iter=10000,aars=None):
+
+  if aars == None:
+      aars = range(0,len(aar_names))
     
-  aar_indices = [y == aar for aar in range(0,len(aar_names))]
-  uti_indices = [np.triu_indices(sum(y == aar),k=1) for aar in range(0,len(aar_names))]
+  aar_indices = [y == aar for aar in aars]
+  uti_indices = [np.triu_indices(sum(y == aar),k=1) for aar in aars]
     
   def cost_function(x,y):
     def foo(x,uti): 
       dr = (x[:,uti[0]]-x[:,uti[1]])
       return np.sqrt(np.sum(dr*dr,axis=0)).sum()
-    return sum([foo(x[:,aar_indices[aar]],uti_indices[aar]) for aar in range(0,len(aar_names))])
+    return sum([foo(x[:,aar_indices[aar]],uti_indices[aar]) for aar in range(0,len(aars))])
 
   def transform(param,x):
     thetas = param[0:len(x)]
@@ -523,7 +526,7 @@ def registration_individuals(x,y,aar_names,max_iter=10000):
     g = grad(loss)(params)
     return opt_update(i, g, opt_state)
 
-  net_params = numpy.random.rand(3*len(x))
+  net_params = numpy.hstack((numpy.random.uniform(-numpy.pi,numpy.pi,len(x)),numpy.zeros(2*len(x))))
   previous_value = loss(net_params)
   logging.info('Iteration 0: loss = %f'%(previous_value))
   opt_state = opt_init(net_params)
@@ -564,7 +567,7 @@ def registration_consensus(x,y,aar_names):
   x_registered = transform(theta,x)
   return x_registered-x_registered.mean(1,keepdims=True)
 
-def registration(count_files,metadata,max_iter=10000):
+def registration(count_files,metadata,max_iter=10000,aars=None):
   logging.info('Reading data')
   data,aar_names = get_tissue_sections(count_files,metadata)
 
@@ -583,7 +586,7 @@ def registration(count_files,metadata,max_iter=10000):
   # registration
   coordinates_float = [coordinates-coordinates.mean(1,keepdims=True) for coordinates in coordinates_float]
   logging.info('Aligning the tissue sections')   
-  coordinates_float = registration_individuals(coordinates_float,annotations,aar_names,max_iter)
+  coordinates_float = registration_individuals(coordinates_float,annotations,aar_names,max_iter,aars)
   logging.info('Rotating the consensus spot cloud')   
   coordinates_float = registration_consensus(coordinates_float,annotations,aar_names)
     
