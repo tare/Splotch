@@ -116,7 +116,7 @@ fi
 
 DIRECTORY=$(($GENE/100))
 
-declare -a  magic_variable=()
+declare -a pids=()
 
 mkdir -p "$OUTPUT_DIRECTORY"/"$DIRECTORY" || error_exit "Error: Cannot create the output directory!"
 
@@ -124,10 +124,10 @@ mkdir -p "$OUTPUT_DIRECTORY"/"$DIRECTORY" || error_exit "Error: Cannot create th
 for CHAIN in `seq 1 $NUM_CHAINS`
 do
   "$BINARY" sample num_samples="$NUM_SAMPLES" num_warmup="$NUM_SAMPLES" random id="$CHAIN" data file="$DATA_DIRECTORY"/"$DIRECTORY"/data_"$GENE".R output file="$OUTPUT_DIRECTORY"/"$DIRECTORY"/output_"$GENE"_"$CHAIN".csv refresh=10 || error_exit "Error: Stan run failed!" &
-  magic_variable[$CHAIN]=$!
+  pids+=($!)
 done
 
-wait ${magic_variable[1]} ${magic_variable[2]} ${magic_variable[3]} ${magic_variable[4]}
+wait ${pids[@]}"
 
 # get variable names from the output of the first chain
 grep lp__ "$OUTPUT_DIRECTORY"/"$DIRECTORY"/output_"$GENE"_1.csv > "$OUTPUT_DIRECTORY"/"$DIRECTORY"/combined_"$GENE".csv || error_exit "Error: Concatenation of individual sample files failed!"
