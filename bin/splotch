@@ -127,7 +127,7 @@ do
   pids+=($!)
 done
 
-wait ${pids[@]}"
+wait ${pids[@]}
 
 # get variable names from the output of the first chain
 grep lp__ "$OUTPUT_DIRECTORY"/"$DIRECTORY"/output_"$GENE"_1.csv > "$OUTPUT_DIRECTORY"/"$DIRECTORY"/combined_"$GENE".csv || error_exit "Error: Concatenation of individual sample files failed!"
