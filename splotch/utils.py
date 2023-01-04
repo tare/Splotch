@@ -12,12 +12,12 @@ from scipy.ndimage.measurements import label
 from scipy.ndimage.morphology import distance_transform_edt
 from scipy.spatial import distance_matrix
 import sklearn.cluster
-from skimage.morphology import watershed
+from skimage.segmentation import watershed
 from skimage.feature import peak_local_max
 
 import jax.numpy as np
 from jax import grad, jit
-from jax.experimental import optimizers
+from jax.example_libraries.optimizers import adagrad
 
 def to_rdump(data,filename):
     with open(filename,'w') as f:
@@ -81,7 +81,7 @@ def read_stan_csv(filename,variables):
   return samples
 
 def savagedickey(samples1,samples2,prior1_mean=0.0,prior1_std=2.0,prior2_mean=0.0,prior2_std=2.0):
-  Delta_theta = (numpy.array([samples1]).T - samples2).flatten(0)
+  Delta_theta = (numpy.array([samples1]).T - samples2).flatten()
   density = scipy.stats.kde.gaussian_kde(Delta_theta,bw_method='scott')
 
   numerator = scipy.stats.norm.pdf(0,loc=prior1_mean-prior2_mean,scale=numpy.sqrt(prior1_std**2+prior2_std**2))
@@ -518,7 +518,7 @@ def registration_individuals(x,y,aar_names,max_iter=10000,aars=None):
 
   loss = lambda param: func(param,x,y)
     
-  opt_init, opt_update, get_params = optimizers.adagrad(step_size=1,momentum=0.9)
+  opt_init, opt_update, get_params = adagrad(step_size=1,momentum=0.9)
 
   @jit
   def step(i, opt_state):
