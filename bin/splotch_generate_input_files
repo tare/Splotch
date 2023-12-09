@@ -1,12 +1,9 @@
 #!/usr/bin/env python
-
-from __future__ import absolute_import, division, print_function
-
-import sys
+import argparse
+import logging
 import os
 import pickle
-import logging
-import argparse
+import sys
 
 import numpy
 import pandas as pd
@@ -14,306 +11,503 @@ import pandas as pd
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
 import splotch
+from splotch.utils import (
+    detect_tissue_sections,
+    filter_arrays,
+    generate_column_labels,
+    generate_dictionary,
+    get_counts,
+    get_spot_adjacency_matrix,
+    get_tissue_section_spots,
+    get_variable_mappings,
+    n_elements_per_level,
+    print_summary,
+    read_aar_matrix,
+    read_array,
+    read_array_metadata,
+    to_rdump,
+)
 
-from splotch.utils import get_variable_mappings, watershed_tissue_sections, \
-  print_summary, read_aar_matrix, read_array, read_array_metadata, \
-  detect_tissue_sections, get_spot_adjacency_matrix, get_counts, \
-  generate_W_sparse, generate_column_labels, generate_dictionary, \
-  get_tissue_section_spots, filter_arrays, n_elements_per_level, to_rdump
 
-def generate_splotch_inputs(count_files,metadata_file,
-                            maximum_number_of_spots_per_tissue_section,
-                            median_sequencing_depth,
-                            n_levels,minimum_sequencing_depth,
-                            output_directory,car,zip):
+def generate_splotch_inputs(
+    count_files,
+    metadata_file,
+    maximum_number_of_spots_per_tissue_section,
+    median_sequencing_depth,
+    n_levels,
+    minimum_sequencing_depth,
+    output_directory,
+    car,
+    zip,
+):
+    # initialize a bunch of variables for keeping tissue section specific data
+    aar_matrix_list = []
+    levels_list = []
+    tissue_mapping_list = []
+    counts_list = []
+    size_factors_list = []
+    coordinates_list = []
+    N_spots_list = []
+    W_list = []
+    W_n_list = []
+    files_list = []
 
-  # initialize a bunch of variables for keeping tissue section specific data
-  aar_matrix_list = []
-  mouse_mapping_list = []
-  levels_list = []
-  tissue_mapping_list = []
-  counts_list = []
-  size_factors_list = []
-  coordinates_list = []
-  N_spots_list = []
-  W_list = []
-  W_n_list = []
-  files_list = []
-  
-  # read metadata file
-  logging.info('Reading metadata')
-  metadata = pd.read_csv(metadata_file,header=0,sep='\t')
+    # read metadata file
+    logging.info("Reading metadata")
+    metadata = pd.read_csv(metadata_file, header=0, sep="\t")
 
-  # discard count files that are not present in the metadata table
-  found_indices = []
-  for count_file_idx,count_file in enumerate(count_files):
-    if count_file in list(metadata['Count file']):
-      found_indices.append(count_file_idx)
-    else:
-      logging.warning('Count file %s will not be considered as it has no metadata entry'%(count_file))
-  count_files = [count_files[idx] for idx in found_indices]
+    # discard count files that are not present in the metadata table
+    found_indices = []
+    for count_file_idx, count_file in enumerate(count_files):
+        if count_file in list(metadata["Count file"]):
+            found_indices.append(count_file_idx)
+        else:
+            logging.warning(
+                "Count file %s will not be considered as it has no metadata entry",
+                count_file,
+            )
+    count_files = [count_files[idx] for idx in found_indices]
 
-  # discard metadata rows for which we have not supplied count files 
-  metadata = metadata[metadata['Count file'].isin(count_files)]
-  
-  # get the identifiers of the mice represented
-  # in the provived read count files, additionally,
-  # encode genotype and sex information as integers 1, 2, 3, and 4
-  logging.info('Initializing')
+    # discard metadata rows for which we have not supplied count files
+    metadata = metadata[metadata["Count file"].isin(count_files)]
 
-  # three levels
-  if n_levels == 3:
-    levels = {key:{} for key in list(metadata['Level 1'].unique())}
-    for level_1 in levels:
-      levels[level_1] = {key: {} for key in list(metadata[metadata['Level 1'] == level_1]['Level 2'].unique())}
-      for level_2 in levels[level_1]:
-        levels[level_1][level_2] = list(metadata[(metadata['Level 1'] == level_1) & (metadata['Level 2'] == level_2)]['Level 3'].unique())
+    # get the identifiers of the mice represented
+    # in the provived read count files, additionally,
+    # encode genotype and sex information as integers 1, 2, 3, and 4
+    logging.info("Initializing")
 
-  # two levels
-  elif n_levels == 2:
-    levels = {key:{} for key in list(metadata['Level 1'].unique())}
-    for level_1 in levels:
-      levels[level_1] = list(metadata[metadata['Level 1'] == level_1]['Level 2'].unique())
+    # three levels
+    if n_levels == 3:
+        levels = {key: {} for key in list(metadata["Level 1"].unique())}
+        for level_1 in levels:
+            levels[level_1] = {
+                key: {}
+                for key in list(
+                    metadata[metadata["Level 1"] == level_1]["Level 2"].unique()
+                )
+            }
+            for level_2 in levels[level_1]:
+                levels[level_1][level_2] = list(
+                    metadata[
+                        (metadata["Level 1"] == level_1)
+                        & (metadata["Level 2"] == level_2)
+                    ]["Level 3"].unique()
+                )
 
-  # one level
-  elif n_levels == 1:
-    levels = list(metadata['Level 1'].unique())
+    # two levels
+    elif n_levels == 2:
+        levels = {key: {} for key in list(metadata["Level 1"].unique())}
+        for level_1 in levels:
+            levels[level_1] = list(
+                metadata[metadata["Level 1"] == level_1]["Level 2"].unique()
+            )
 
-  level_mappings,last_level_identifiers,conditions_to_variables = get_variable_mappings(
-      count_files,metadata,levels,n_levels)
+    # one level
+    elif n_levels == 1:
+        levels = list(metadata["Level 1"].unique())
 
-  # number of variables per level
-  N_levels = [0]*n_levels
-  n_elements_per_level(levels,0,N_levels)
+    (
+        level_mappings,
+        last_level_identifiers,
+        conditions_to_variables,
+    ) = get_variable_mappings(levels, n_levels)
 
-  # get gene symbols and AAR names
-  genes,_,_,_,_ = read_array(count_files[0])
-  annotation_filename = metadata[metadata['Count file'] == count_files[0]]['Annotation file'].values[0]
-  _,aar_names = read_aar_matrix(annotation_filename)
+    # number of variables per level
+    N_levels = [0] * n_levels
+    n_elements_per_level(levels, 0, N_levels)
 
-  # get the number of genes
-  N_genes = len(genes)
-  # get the number of distint aars
-  N_covariates = len(aar_names)
-  
-  # loop over the read count files
-  for filename in count_files: 
-      logging.info('Processing %s'%(filename))
+    # get gene symbols and AAR names
+    genes, _, _, _, _ = read_array(count_files[0])
+    annotation_filename = metadata[metadata["Count file"] == count_files[0]][
+        "Annotation file"
+    ].values[0]
+    _, aar_names = read_aar_matrix(annotation_filename)
 
-      logging.info('Reading data')
-      # read the count file
-      array_genes,array_coordinates_str,array_coordinates_float,array_counts,array_counts_per_spot = \
-        read_array(filename)
+    # get the number of distint aars
+    N_covariates = len(aar_names)
 
-      if not numpy.array_equal(array_genes,genes):
-          logging.critical('Mismatch with genes! Order of the genes must match!')
-          sys.exit(1)
-  
-      # get genotype, sex, and mouse information for the 
-      # tissue section(s) on the array
-      array_levels = read_array_metadata(metadata,filename,n_levels)
+    # loop over the read count files
+    for filename in count_files:
+        logging.info("Processing %s" % (filename))
 
-      # this is required for handling correctly the hierarchical structure
-      # in the splotch code, that is, for keeping track of which beta coefficient
-      # random variable to use for the given tissue section
-      tissue_mapping = last_level_identifiers[str(array_levels)]
-  
-      # read the spot annotations
-      annotation_filename = metadata[metadata['Count file'] == filename]['Annotation file'].values[0]
-      array_aar_matrix,array_aar_names = read_aar_matrix(annotation_filename)
+        logging.info("Reading data")
+        # read the count file
+        (
+            array_genes,
+            array_coordinates_str,
+            array_coordinates_float,
+            array_counts,
+            array_counts_per_spot,
+        ) = read_array(filename)
 
-      if not numpy.array_equal(array_aar_names,aar_names):
-        logging.critical('Mismatch with AAR names! Order of the AARs must match!')
+        if not numpy.array_equal(array_genes, genes):
+            logging.critical("Mismatch with genes! Order of the genes must match!")
+            sys.exit(1)
+
+        # get genotype, sex, and mouse information for the
+        # tissue section(s) on the array
+        array_levels = read_array_metadata(metadata, filename, n_levels)
+
+        # this is required for handling correctly the hierarchical structure
+        # in the splotch code, that is, for keeping track of which beta coefficient
+        # random variable to use for the given tissue section
+        tissue_mapping = last_level_identifiers[str(array_levels)]
+
+        # read the spot annotations
+        annotation_filename = metadata[metadata["Count file"] == filename][
+            "Annotation file"
+        ].values[0]
+        array_aar_matrix, array_aar_names = read_aar_matrix(annotation_filename)
+
+        if not numpy.array_equal(array_aar_names, aar_names):
+            logging.critical("Mismatch with AAR names! Order of the AARs must match!")
+            sys.exit(1)
+
+        # find spots with enoguh UMIs
+        good_spots = array_counts_per_spot >= minimum_sequencing_depth
+
+        # .. additionally find the spots without annotations
+        for n, coord in enumerate(array_coordinates_str):
+            # discard the spot if it is not present in annotation file
+            # or it does not have annotations
+            if (coord not in array_aar_matrix.columns) or (
+                array_aar_matrix[coord].sum() == 0
+            ):
+                good_spots[n] = False
+
+        # let us skip the current array if we have less than 10 spots left
+        # useful for troubleshooting
+        if good_spots.sum() < 10:
+            logging.warning(
+                "The array %s will be skipped because it has less than 10 annotated spots!",
+                filename,
+            )
+            continue
+
+        # let us focus on the spots with annotations and sufficient sequencing depth
+        (
+            array_coordinates_str,
+            array_coordinates_float,
+            array_counts,
+            array_counts_per_spot,
+        ) = filter_arrays(
+            good_spots,
+            coordinates_str=array_coordinates_str,
+            coordinates_float=array_coordinates_float,
+            counts=array_counts,
+            counts_per_spot=array_counts_per_spot,
+        )
+
+        # let us calculate the size factors for the spots on the array
+        array_size_factors = array_counts_per_spot / median_sequencing_depth
+
+        logging.info("Detecting tissue sections on the array")
+        # detect distinct tissue sections on the slide and
+        # try to separate overlapping tissue sections
+        (
+            tissue_section_labels,
+            spots_tissue_section_labeled,
+        ) = detect_tissue_sections(
+            array_coordinates_float,
+            True,
+            maximum_number_of_spots_per_tissue_section,
+        )
+
+        # loop over the detected tissue sections on the slide
+        for tissue_idx in tissue_section_labels:
+            # get the indices of the spots assigned to the current
+            # tissue section
+            tissue_section_spots = get_tissue_section_spots(
+                tissue_idx,
+                array_coordinates_float,
+                spots_tissue_section_labeled,
+            )
+
+            # get the coordinates of the spots assigned to the current tissue section
+            # get the counts of the spots assigned to the current tissue section
+            (
+                tissue_section_coordinates_str,
+                tissue_section_coordinates_float,
+                tissue_section_counts,
+                tissue_section_size_factors,
+            ) = filter_arrays(
+                tissue_section_spots,
+                coordinates_str=array_coordinates_str,
+                coordinates_float=array_coordinates_float,
+                counts=array_counts,
+                size_factors=array_size_factors,
+            )
+
+            # get aar matrix for the spots on the current tissue section
+            tissue_section_aar_matrix = array_aar_matrix[
+                tissue_section_coordinates_str
+            ].values
+
+            if car:
+                # get the spot adjacency matrix of the spots
+                # on the current tissue section
+                tissue_section_W = get_spot_adjacency_matrix(
+                    tissue_section_coordinates_float
+                )
+
+                # CAR prior will break if there are spots without neighbors,
+                # thus let us get rid of those spots
+                connected_spots = tissue_section_W.sum(0) > 0
+                (
+                    tissue_section_coordinates_str,
+                    tissue_section_coordinates_float,
+                    tissue_section_counts,
+                    tissue_section_size_factors,
+                    tissue_section_aar_matrix,
+                    tissue_section_W,
+                ) = filter_arrays(
+                    connected_spots,
+                    coordinates_str=tissue_section_coordinates_str,
+                    coordinates_float=tissue_section_coordinates_float,
+                    counts=tissue_section_counts,
+                    size_factors=tissue_section_size_factors,
+                    aar_matrix=tissue_section_aar_matrix,
+                    W=tissue_section_W,
+                )
+
+            # gather the data of the current tissue section
+            # read counts for the spots on the current tissue section
+            counts_list.append(tissue_section_counts)
+            # link the current tissue section with the filename
+            files_list.append(filename)
+            # number of spots on the current tissue section
+            N_spots_list.append(len(tissue_section_coordinates_str))
+            # coordinates of the spots on the current tissue section
+            coordinates_list.append(tissue_section_coordinates_str)
+            # size factors of the spots on the current tissue section
+            size_factors_list.append(tissue_section_size_factors)
+            # annotations of the spots on the current tissue section
+            aar_matrix_list.append(tissue_section_aar_matrix)
+            # levels of the current tissue section
+            levels_list.append(array_levels)
+            if car:
+                # adjacency matrix of the spots on the current tissue section
+                W_list.append(tissue_section_W)
+                # number of adjacent spot pairs
+                W_n_list.append(int(tissue_section_W.sum() / 2))
+            # link the current tissue section to the mouse
+            tissue_mapping_list.append(tissue_mapping)
+
+    # print summary of the collected data
+    print_summary(levels_list, coordinates_list)
+
+    # get the number of tissue sections
+    N_tissues = len(counts_list)
+
+    # generate a dictionary containing our input data for splotch
+    # these are not gene specific
+    logging.info("Generating input data dictionary (might take a while)")
+    data = generate_dictionary(
+        N_spots_list,
+        N_tissues,
+        N_covariates,
+        N_levels,
+        coordinates_list,
+        size_factors_list,
+        aar_matrix_list,
+        level_mappings,
+        tissue_mapping_list,
+        W_list,
+        W_n_list,
+        car,
+        zip,
+    )
+
+    # write input data files for each gene separately
+    logging.info(
+        "Saving the input data files (%s)",
+        os.path.normpath("%s/" % (output_directory)),
+    )
+    for gene_idx in range(0, len(genes)):
+        # logging.info('Writing the input data file for %s (%d/%d)'%(genes[gene_idx],gene_idx+1,len(genes)))
+        # counts are gene specific: replace the counts item
+        data["counts"] = get_counts(gene_idx, N_tissues, counts_list)
+
+        if (gene_idx + 1) % 1000 == 0:
+            logging.info("%d/%d", gene_idx + 1, len(genes))
+
+        # create the directory if it does not exist
+        if not os.path.exists(
+            os.path.normpath("%s/%d/" % (output_directory, (gene_idx + 1) / 100))
+        ):
+            os.makedirs(
+                os.path.normpath("%s/%d/" % (output_directory, (gene_idx + 1) / 100))
+            )
+
+        # create the input data file containing data for the current gene
+        # using the R dump format
+        to_rdump(
+            data,
+            os.path.normpath(
+                "%s/%d/data_%d.R"
+                % (output_directory, (gene_idx + 1) / 100, gene_idx + 1)
+            ),
+        )
+
+    # write the variables containing genes, columns, aar names to disk
+    logging.info(
+        "Saving additional information (%s)",
+        os.path.normpath(f"{output_directory}/information.p"),
+    )
+    filenames_coordinates = generate_column_labels(files_list, coordinates_list)
+    with open(os.path.normpath(f"{output_directory}/information.p"), "wb") as f:
+        pickle.dump(
+            {
+                "genes": genes,
+                "filenames_and_coordinates": filenames_coordinates,
+                "annotation_mapping": aar_names,
+                "beta_mapping": conditions_to_variables,
+                "n_levels": n_levels,
+                "metadata": metadata,
+                "scaling_factor": median_sequencing_depth,
+                "car": car,
+                "zip": car,
+            },
+            f,
+        )
+
+    logging.info("Finished")
+
+
+if __name__ == "__main__":
+
+    def levels_type(x):
+        x = int(x)
+        if x not in [1, 2, 3]:
+            raise argparse.ArgumentTypeError(
+                "Number of levels should be either 1, 2 or 3"
+            )
+        return x
+
+    parser = argparse.ArgumentParser(
+        description="A script for generating input data for Splotch"
+    )
+    parser.add_argument(
+        "-c",
+        "--count_files",
+        action="store",
+        dest="count_files",
+        type=str,
+        nargs="+",
+        required=True,
+        help="list of read count filenames",
+    )
+    parser.add_argument(
+        "-m",
+        "--metadata_file",
+        action="store",
+        dest="metadata_file",
+        type=str,
+        required=True,
+        help="metadata filename",
+    )
+    parser.add_argument(
+        "-s",
+        "--scaling_factor",
+        action="store",
+        dest="scaling_factor",
+        type=float,
+        required=True,
+        help="scaling_factor (e.g. median sequencing depth over spots)",
+    )
+    parser.add_argument(
+        "-l",
+        "--n_levels",
+        action="store",
+        dest="n_levels",
+        type=levels_type,
+        required=False,
+        default=3,
+        help="number of levels in the linear model (default is 3)",
+    )
+    parser.add_argument(
+        "-d",
+        "--min_depth",
+        action="store",
+        dest="minimum_sequencing_depth",
+        type=float,
+        required=False,
+        default=100.0,
+        help="minimum number of UMIs per spot (default is 100)",
+    )
+    parser.add_argument(
+        "-t",
+        "--t",
+        action="store",
+        dest="maximum_number_of_spots_per_tissue_section",
+        type=float,
+        required=False,
+        default=2000.0,
+        help=(
+            "number of spots threshold for identifying overlapping "
+            "tissue sections (default is 2000)"
+        ),
+    )
+    parser.add_argument(
+        "-n",
+        "--no-car",
+        action="store_false",
+        dest="car",
+        required=False,
+        help="disable the conditional autoregressive prior",
+    )
+    parser.add_argument(
+        "-z",
+        "--no-zip",
+        action="store_false",
+        dest="zip",
+        required=False,
+        help=(
+            "use the Poisson likelihood instead of the "
+            "zero-inflated Poisson likelihood"
+        ),
+    )
+    parser.add_argument(
+        "-o",
+        "--output_directory",
+        action="store",
+        dest="output_directory",
+        type=str,
+        required=False,
+        default="data",
+        help="output_directory (default is data)",
+    )
+    parser.add_argument(
+        "-v",
+        "--version",
+        action="version",
+        version=f"{parser.prog} {splotch.__version__}",
+    )
+
+    parser.set_defaults(car=True)
+    parser.set_defaults(zip=True)
+    options = parser.parse_args()
+
+    # check that the supplied read count files exist
+    for filename in options.count_files:
+        if not os.path.isfile(filename):
+            logging.critical("Count file %s does not exist!", filename)
+            sys.exit(1)
+    # check that the supplied metadata file exists
+    if not os.path.isfile(options.metadata_file):
+        logging.critical("Metadata file %s does not exist!", options.metadata_file)
         sys.exit(1)
-  
-      # find spots with enoguh UMIs
-      good_spots = array_counts_per_spot >= minimum_sequencing_depth
 
-      # .. additionally find the spots without annotations
-      for n,coord in enumerate(array_coordinates_str):
-        # discard the spot if it is not present in annotation file
-        # or it does not have annotations
-        if (coord not in array_aar_matrix.columns) or \
-           (array_aar_matrix[coord].sum() == 0):
-          good_spots[n] = False
-
-      # let us skip the current array if we have less than 10 spots left
-      # useful for troubleshooting
-      if good_spots.sum() < 10:
-        logging.warning('The array %s will be skipped because it has less than 10 annotated spots!'%(filename))
-        continue
-  
-      # let us focus on the spots with annotations and sufficient sequencing depth
-      array_coordinates_str,array_coordinates_float,array_counts,array_counts_per_spot = \
-        filter_arrays(good_spots,coordinates_str=array_coordinates_str,
-                      coordinates_float=array_coordinates_float,
-                      counts=array_counts,counts_per_spot=array_counts_per_spot)
-  
-      # let us calculate the size factors for the spots on the array
-      array_size_factors = array_counts_per_spot / median_sequencing_depth
-  
-      logging.info('Detecting tissue sections on the array')
-      # detect distinct tissue sections on the slide and
-      # try to separate overlapping tissue sections
-      tissue_section_labels,spots_tissue_section_labeled = \
-        detect_tissue_sections(array_coordinates_float,True,maximum_number_of_spots_per_tissue_section)
-  
-      # loop over the detected tissue sections on the slide
-      for tissue_idx in tissue_section_labels:
-        # get the indices of the spots assigned to the current
-        # tissue section
-        tissue_section_spots = get_tissue_section_spots(tissue_idx,array_coordinates_float,
-                                                        spots_tissue_section_labeled)
-
-        # get the coordinates of the spots assigned to the current tissue section
-        # get the counts of the spots assigned to the current tissue section
-        tissue_section_coordinates_str,tissue_section_coordinates_float,tissue_section_counts,\
-          tissue_section_size_factors = \
-          filter_arrays(tissue_section_spots,coordinates_str=array_coordinates_str,
-                        coordinates_float=array_coordinates_float,
-                        counts=array_counts,size_factors=array_size_factors)
-  
-        # get aar matrix for the spots on the current tissue section
-        tissue_section_aar_matrix = array_aar_matrix[tissue_section_coordinates_str].values
-  
-        if car:
-          # get the spot adjacency matrix of the spots
-          # on the current tissue section
-          tissue_section_W = get_spot_adjacency_matrix(tissue_section_coordinates_float)
-  
-          # CAR prior will break if there are spots without neighbors,
-          # thus let us get rid of those spots
-          connected_spots = tissue_section_W.sum(0) > 0
-          tissue_section_coordinates_str,tissue_section_coordinates_float,tissue_section_counts,\
-            tissue_section_size_factors,tissue_section_aar_matrix,tissue_section_W = \
-            filter_arrays(connected_spots,coordinates_str=tissue_section_coordinates_str,
-                          coordinates_float=tissue_section_coordinates_float,counts=tissue_section_counts,
-                          size_factors=tissue_section_size_factors,aar_matrix=tissue_section_aar_matrix,
-                          W=tissue_section_W)
-  
-        # gather the data of the current tissue section
-        # read counts for the spots on the current tissue section
-        counts_list.append(tissue_section_counts)
-        # link the current tissue section with the filename
-        files_list.append(filename)
-        # number of spots on the current tissue section
-        N_spots_list.append(len(tissue_section_coordinates_str))
-        # coordinates of the spots on the current tissue section
-        coordinates_list.append(tissue_section_coordinates_str)
-        # size factors of the spots on the current tissue section
-        size_factors_list.append(tissue_section_size_factors)
-        # annotations of the spots on the current tissue section
-        aar_matrix_list.append(tissue_section_aar_matrix)
-        # levels of the current tissue section
-        levels_list.append(array_levels)
-        if car:
-          # adjacency matrix of the spots on the current tissue section
-          W_list.append(tissue_section_W)
-          # number of adjacent spot pairs
-          W_n_list.append(int(tissue_section_W.sum()/2))
-        # link the current tissue section to the mouse
-        tissue_mapping_list.append(tissue_mapping)
-
-  # print summary of the collected data
-  print_summary(levels_list,coordinates_list)
-
-  # get the number of tissue sections
-  N_tissues = len(counts_list)
-  
-  # generate a dictionary containing our input data for splotch
-  # these are not gene specific
-  logging.info('Generating input data dictionary (might take a while)')
-  data = generate_dictionary(N_spots_list,N_tissues,N_covariates,
-                             N_levels,
-                             coordinates_list,size_factors_list,
-                             aar_matrix_list,level_mappings,
-                             tissue_mapping_list,
-                             W_list,W_n_list,car,zip)
-
-  # write input data files for each gene separately
-  logging.info('Saving the input data files (%s)'%(os.path.normpath('%s/'%(output_directory))))
-  for gene_idx in range(0,len(genes)):
-    #logging.info('Writing the input data file for %s (%d/%d)'%(genes[gene_idx],gene_idx+1,len(genes)))
-    # counts are gene specific: replace the counts item 
-    data['counts']  = get_counts(gene_idx,N_tissues,counts_list)
-
-    if (gene_idx+1) % 1000 == 0:
-      logging.info('%d/%d'%(gene_idx+1,len(genes)))
-
-    # create the directory if it does not exist
-    if not os.path.exists(os.path.normpath('%s/%d/'%(output_directory,(gene_idx+1)/100))):
-      os.makedirs(os.path.normpath('%s/%d/'%(output_directory,(gene_idx+1)/100)))
-
-    # create the input data file containing data for the current gene
-    # using the R dump format
-    to_rdump(data,os.path.normpath('%s/%d/data_%d.R'%(output_directory,(gene_idx+1)/100,gene_idx+1)))
-
-  # write the variables containing genes, columns, aar names to disk
-  logging.info('Saving additional information (%s)'%(os.path.normpath('%s/information.p'%(output_directory))))
-  filenames_coordinates = generate_column_labels(files_list,coordinates_list)
-  pickle.dump({'genes':genes,'filenames_and_coordinates':filenames_coordinates,'annotation_mapping':aar_names,'beta_mapping':conditions_to_variables,'n_levels':n_levels,'metadata':metadata,'scaling_factor':median_sequencing_depth,'car':car,'zip':car},open(os.path.normpath('%s/information.p'%(output_directory)),'wb'))
-
-  logging.info('Finished')
-  
-if __name__ == '__main__':
-
-  def levels_type(x):
-    x = int(x)
-    if x not in [1,2,3]:
-      raise argparse.ArgumentTypeError("Number of levels should be either 1, 2 or 3")
-    return x
-
-  parser = argparse.ArgumentParser(
-    description='A script for generating input data for Splotch')
-  parser.add_argument('-c','--count_files',action='store',
-                      dest='count_files',type=str,nargs='+',
-                      required=True,help='list of read count filenames')
-  parser.add_argument('-m','--metadata_file',action='store',
-                      dest='metadata_file',type=str,required=True,
-                      help='metadata filename')
-  parser.add_argument('-s','--scaling_factor',action='store',
-                      dest='scaling_factor',type=float,required=True,
-                      help='scaling_factor (e.g. median sequencing depth over spots)')
-  parser.add_argument('-l','--n_levels',action='store',
-                      dest='n_levels',type=levels_type,required=False,default=3,
-                      help='number of levels in the linear model (default is 3)')
-  parser.add_argument('-d','--min_depth',action='store',
-                      dest='minimum_sequencing_depth',type=float,
-                      required=False,default=100.0,
-                      help='minimum number of UMIs per spot (default is 100)')
-  parser.add_argument('-t','--t',action='store',
-                      dest='maximum_number_of_spots_per_tissue_section',type=float,
-                      required=False,default=2000.0,
-                      help='number of spots threshold for identifying overlapping tissue sections (default is 2000)')
-  parser.add_argument('-n','--no-car',action='store_false',dest='car',required=False,
-                      help='disable the conditional autoregressive prior')
-  parser.add_argument('-z','--no-zip',action='store_false',dest='zip',required=False,
-                      help='use the Poisson likelihood instead of the zero-inflated Poisson likelihood')
-  parser.add_argument('-o','--output_directory',action='store',
-                      dest='output_directory',type=str,
-                      required=False,default='data',
-                      help='output_directory (default is data)')
-  parser.add_argument('-v','--version',action='version',
-                      version='%s %s'%(parser.prog,splotch.__version__))
-
-  parser.set_defaults(car=True)
-  parser.set_defaults(zip=True)
-  options = parser.parse_args()
-
-  # check that the supplied read count files exist
-  for filename in options.count_files:
-    if not os.path.isfile(filename):
-      logging.critical('Count file %s does not exist!'%(filename))
-      sys.exit(1)
-  # check that the supplied metadata file exists
-  if not os.path.isfile(options.metadata_file):
-    logging.critical('Metadata file %s does not exist!'%(metadata_file))
-    sys.exit(1)
-
-  # generate the data dictionaries 
-  generate_splotch_inputs(options.count_files,options.metadata_file,
-                          options.maximum_number_of_spots_per_tissue_section,
-                          options.scaling_factor,options.n_levels,
-                          options.minimum_sequencing_depth,options.output_directory,
-                          options.car,options.zip)
-  sys.exit(0)
+    # generate the data dictionaries
+    generate_splotch_inputs(
+        options.count_files,
+        options.metadata_file,
+        options.maximum_number_of_spots_per_tissue_section,
+        options.scaling_factor,
+        options.n_levels,
+        options.minimum_sequencing_depth,
+        options.output_directory,
+        options.car,
+        options.zip,
+    )
+    sys.exit(0)
