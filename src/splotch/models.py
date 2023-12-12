@@ -1,31 +1,34 @@
 """model.py."""
 import jax.numpy as jnp
+import numpy as np
 import numpyro
 import numpyro.distributions as dist
 
-from splotch.utils import SplotchInputData
-
 
 def splotch_v1(
-    gene_idx: int, splotch_input_data: SplotchInputData, use_zero_inflated: bool = False
+    num_spots: int,
+    num_aars: int,
+    num_levels: int,
+    num_categories_per_level: dict[str, int],
+    counts: np.ndarray,
+    annotations: np.ndarray,
+    levels: np.ndarray,
+    size_factors: np.ndarray,
+    use_zero_inflated: bool = False,
 ) -> None:
     """Splotch generative model.
 
     Args:
-        gene_idx: Gene of interest.
-        splotch_input_data: Splotch input data.
+        num_spots: Number of spots.
+        num_aars: Number of AARs.
+        num_levels: Number of levels.
+        num_categories_per_level: Number of categories per level
+        counts: Count for each spot.
+        annotations: Annotation for each spot.
+        levels: Level categories for each spot.
+        size_factors: Size factor for each spot.
         use_zero_inflated: Whether to use the zero-inflated Poisson likelihood.
     """
-    num_spots = splotch_input_data.num_spots()
-    num_aars = splotch_input_data.num_aars()
-    num_levels = splotch_input_data.num_levels()
-    num_categories_per_level = splotch_input_data.num_categories_per_level()
-
-    counts = splotch_input_data.counts()[:, gene_idx]
-    annotations = splotch_input_data.annotations()
-    levels = splotch_input_data.levels()
-    size_factors = splotch_input_data.size_factors()
-
     if num_levels not in {1, 2, 3}:
         msg = "Only 1, 2, or 3 levels are supported"
         raise ValueError(msg)

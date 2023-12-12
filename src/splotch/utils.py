@@ -2,13 +2,14 @@
 import logging
 import sys
 from dataclasses import dataclass
+from typing import Any, Mapping
 
+import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 import scipy.stats
 from jax import Array
-from numpyro.infer import MCMC
-from numpyro.infer.svi import SVIRunResult
+from numpyro.diagnostics import summary
 from scipy.ndimage.measurements import label
 from scipy.ndimage.morphology import distance_transform_edt
 from skimage.feature import peak_local_max
@@ -24,6 +25,7 @@ class SplotchInputData:
     metadata: pd.DataFrame
 
     def __post_init__(self) -> None:
+        """Initialize data dependent fields."""
         self.metadata["aar"] = self.annotation_data.columns[self.annotations()]
 
     def num_levels(self) -> int:
@@ -46,9 +48,20 @@ class SplotchInputData:
         """Get number of spots."""
         return self.count_data.shape[0]
 
-    def counts(self) -> np.ndarray:
-        """Get counts matrix."""
-        return self.count_data.values
+    def counts(self, genes: list[str] | None = None) -> np.ndarray:
+        """Get counts matrix.
+
+        Args:
+            genes: TBA.
+
+        Returns:
+            Count matrix.
+        """
+        return (
+            self.count_data.values
+            if genes is None
+            else self.count_data.loc[:, genes].values
+        )
 
     def annotations(self) -> np.ndarray:
         """Get annotations."""
@@ -77,13 +90,25 @@ class SplotchResult:
     """Splotch result."""
 
     metadata: pd.DataFrame
-    inference_method: MCMC | SVIRunResult
+    genes: list[str]
+    inference_metrics: dict[str, Any]
     posterior_samples: dict[str, Array]
 
-    def rates(self) -> pd.DataFrame:
-        """Get posterior samples of rates."""
-        return pd.DataFrame(
-            self.posterior_samples["lambda"].T, index=self.metadata.index
+    def __post_init__(self) -> None:
+        """Initialize data dependent fields."""
+        self.rates = pd.DataFrame(
+            jnp.reshape(
+                jnp.moveaxis(self.posterior_samples["lambda"], 2, 1),
+                (
+                    self.posterior_samples["lambda"].shape[0]
+                    * self.posterior_samples["lambda"].shape[2],
+                    self.posterior_samples["lambda"].shape[1],
+                ),
+            ),
+            index=pd.MultiIndex.from_tuples(
+                ((gene, *item) for gene in self.genes for item in self.metadata.index),
+                names=("gene", *self.metadata.index.names),
+            ),
         )
 
 
@@ -165,6 +190,14 @@ def read_annotation_files(annotation_files: list[str]) -> pd.DataFrame:
 def process_array(
     counts_df: pd.DataFrame,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Process array.
+
+    Args:
+        counts_df: TBA.
+
+    Returns:
+        TBA.
+    """
     coordinates_orig = np.asarray(list(counts_df.columns))
     coordinates = np.asarray(
         [
@@ -215,6 +248,7 @@ def filter_spots(
 def get_input_data(
     metadata: str,
     num_levels: int,
+    min_detection_rate: float = 0.02,
     min_total_count: int = 100,
     min_num_spots: int = 10,
     separate_overlapping_tissue_sections: bool = True,
@@ -227,6 +261,7 @@ def get_input_data(
     Args:
         metadata: TBA.
         num_levels: TBA.
+        min_detection_rate: TBA.
         min_total_count: TBA.
         min_num_spots: TBA.
         separate_overlapping_tissue_sections: TBA.
@@ -242,7 +277,9 @@ def get_input_data(
         msg = "num_levels has to be 1, 2, or 3"
         raise ValueError(msg)
 
-    counts_df = read_count_files(metadata_df.count_file)
+    counts_df = read_count_files(
+        metadata_df.count_file, min_detection_rate=min_detection_rate
+    )
     annotations_df = read_annotation_files(metadata_df.annotation_file)
 
     genes = list(counts_df.index)
@@ -320,6 +357,7 @@ def get_input_data(
             separate_overlapping_tissue_sections,
             max_num_spots_per_tissue_section,
             min_num_spots_per_tissue_section,
+            seed=seed,
         )
 
         for tissue_section_label in tissue_section_labels:
@@ -439,10 +477,10 @@ def savagedickey(
         Savage-Dickey density ratio value.
     """
     delta_theta = (theta_1[:, None] - theta_2).flatten()
-    denominator = scipy.stats.kde.gaussian_kde(delta_theta, bw_method="scott").evaluate(
-        0
-    )[0]
-    numerator = scipy.stats.norm.pdf(
+    denominator: float = scipy.stats.kde.gaussian_kde(
+        delta_theta, bw_method="scott"
+    ).evaluate(0)[0]
+    numerator: float = scipy.stats.norm.pdf(
         0,
         loc=mu_1 - mu_2,
         scale=np.sqrt(np.square(sigma_1) + np.square(sigma_2)),
@@ -585,3 +623,42 @@ def detect_tissue_sections(
     logging.info("Keeping %d tissue sections", len(unique_labels))
 
     return unique_labels, labeled_array, coordinates_discretized
+
+
+def get_mcmc_summary(posterior_samples: Array) -> pd.DataFrame:
+    """Get MCMC summary DataFrame.
+
+    Args:
+        posterior_samples: Posterior samples.
+
+    Returns:
+        DataFrame.
+    """
+
+    def process_variable(data: Mapping[str, np.ndarray | np.float64]) -> dict[str, Any]:
+        res: dict[str, Any] = {}
+        for statistic, values in data.items():
+            if "index" not in res:
+                if isinstance(values, np.ndarray):
+                    res["index"] = [
+                        tuple(map(int, x))
+                        for x in zip(
+                            *jnp.unravel_index(jnp.arange(values.size), values.shape)
+                        )
+                    ]
+                else:
+                    res["index"] = [None]
+            if isinstance(values, np.ndarray):
+                res[statistic] = values.flatten().tolist()
+            else:
+                res[statistic] = [values]
+        return res
+
+    return pd.concat(
+        [
+            pd.DataFrame.from_dict(process_variable(data))
+            for data in summary(posterior_samples).values()
+        ],
+        axis=0,
+        ignore_index=False,
+    ).set_index("index")
