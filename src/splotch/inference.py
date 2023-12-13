@@ -268,6 +268,6 @@ def run_svi(
     return SplotchResult(
         splotch_input_data.metadata,
         genes,
-        {"losses": pd.DataFrame(losses, index=genes), "params": params},
+        {"losses": losses, "params": params},
         samples,
     )

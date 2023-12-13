@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats
 from jax import Array
+from jax.tree_util import tree_map
 from numpyro.diagnostics import summary
 from scipy.ndimage.measurements import label
 from scipy.ndimage.morphology import distance_transform_edt
@@ -108,6 +109,46 @@ class SplotchResult:
             index=pd.MultiIndex.from_tuples(
                 ((gene, *item) for gene in self.genes for item in self.metadata.index),
                 names=("gene", *self.metadata.index.names),
+            ),
+        )
+
+    def __add__(self, other: "SplotchResult") -> "SplotchResult":
+        # check that metadata match
+
+        if not self.metadata.equals(other.metadata):
+            msg = "Metadata are not the same"
+            raise ValueError(msg)
+        if len(set(self.genes) & set(other.genes)) > 0:
+            msg = "Genes overlap"
+            raise ValueError(msg)
+        if self.inference_metrics.keys() != other.inference_metrics.keys():
+            msg = "Cannot combine results from different methods"
+            raise ValueError(msg)
+        # SVI
+        if "losses" in self.inference_metrics.keys():
+            return SplotchResult(
+                self.metadata,
+                self.genes + other.genes,
+                tree_map(
+                    lambda *x: jnp.vstack(x),
+                    *(self.inference_metrics, other.inference_metrics),
+                ),
+                tree_map(
+                    lambda *x: jnp.vstack(x),
+                    *(self.posterior_samples, other.posterior_samples),
+                ),
+            )
+        # NUTS
+        return SplotchResult(
+            self.metadata,
+            self.genes + other.genes,
+            tree_map(
+                lambda *x: pd.concat(x, axis=0),
+                *(self.inference_metrics, other.inference_metrics),
+            ),
+            tree_map(
+                lambda *x: jnp.vstack(x),
+                *(self.posterior_samples, other.posterior_samples),
             ),
         )
 
