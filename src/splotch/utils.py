@@ -131,7 +131,7 @@ class SplotchResult:
                 self.metadata,
                 self.genes + other.genes,
                 tree_map(
-                    lambda *x: jnp.vstack(x),
+                    lambda *x: jnp.concatenate(x),
                     *(self.inference_metrics, other.inference_metrics),
                 ),
                 tree_map(
