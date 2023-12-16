@@ -193,10 +193,13 @@ def splotch_v1(
     sigma_spot_raw = numpyro.sample("sigma_spot", dist.HalfNormal(1))
     with numpyro.plate("spot", num_spots):
         spot_noise_raw = numpyro.sample("spot_noise_raw", dist.Normal(0, 1))
+    spot_noise = numpyro.deterministic(
+        "spot_noise", sigma_spot * sigma_spot_raw * spot_noise_raw
+    )
 
     rate = numpyro.deterministic(
         "lambda",
-        jnp.exp(beta + sigma_spot * sigma_spot_raw * spot_noise_raw + f),
+        jnp.exp(beta + spot_noise + f),
     )
 
     if use_zero_inflated:
