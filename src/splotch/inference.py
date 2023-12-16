@@ -3,6 +3,7 @@ from functools import partial
 from typing import Any
 
 import jax.numpy as jnp
+import numpy as np
 import pandas as pd
 from jax import Array, jit, pmap, random, vmap
 from jax.lax import scan
@@ -19,6 +20,57 @@ from splotch.models import splotch_v1
 from splotch.utils import SplotchInputData, SplotchResult, get_mcmc_summary
 
 KeyArray = Array
+
+
+def get_padded_coordinates(splotch_input_data: SplotchInputData) -> tuple[Array, Array]:
+    """Get padded coordinates.
+
+    Args:
+        splotch_input_data: Splotch input data.
+
+    Returns:
+        Padded coordinates and valid indices.
+    """
+    tissue_sections = splotch_input_data.metadata.index.get_level_values(
+        "tissue_section"
+    ).values
+    coordinates = np.split(
+        np.vstack(
+            (
+                splotch_input_data.metadata.x.values,
+                splotch_input_data.metadata.y.values,
+            )
+        ).T,
+        np.where(tissue_sections[:-1] != tissue_sections[1:])[0] + 1,
+    )
+
+    max_tissue_section_size = int(
+        max(
+            np.diff(
+                np.hstack(
+                    (
+                        np.zeros(1),
+                        np.where(tissue_sections[:-1] != tissue_sections[1:])[0] + 1,
+                        len(tissue_sections) * np.ones(1),
+                    )
+                )
+            )
+        )
+    )
+    padded_coordinates = np.stack(
+        [
+            np.pad(
+                c,
+                ((0, max_tissue_section_size - len(c)), (0, 0)),
+                constant_values=np.nan,
+            )
+            for c in coordinates
+        ]
+    )
+    valid_coordinates = ~np.isnan(padded_coordinates)
+    padded_coordinates[np.isnan(padded_coordinates)] = 0.0
+
+    return padded_coordinates, valid_coordinates
 
 
 def run_nuts(
@@ -54,6 +106,7 @@ def run_nuts(
     annotations = splotch_input_data.annotations()
     levels = splotch_input_data.levels()
     size_factors = splotch_input_data.size_factors()
+    padded_coordinates, valid_coordinates = get_padded_coordinates(splotch_input_data)
 
     model_kwargs = {
         "num_spots": num_spots,
@@ -61,6 +114,8 @@ def run_nuts(
         "num_levels": num_levels,
         "num_categories_per_level": num_categories_per_level,
         "annotations": annotations,
+        "padded_coordinates": padded_coordinates,
+        "valid_coordinates": valid_coordinates,
         "levels": levels,
         "size_factors": size_factors,
         "use_zero_inflated": use_zero_inflated,
@@ -208,10 +263,11 @@ def run_svi(
     num_aars = splotch_input_data.num_aars()
     num_levels = splotch_input_data.num_levels()
     num_categories_per_level = splotch_input_data.num_categories_per_level()
-    counts = jnp.asarray(splotch_input_data.counts(genes))
+    counts = np.asarray(splotch_input_data.counts(genes))
     annotations = splotch_input_data.annotations()
     levels = splotch_input_data.levels()
     size_factors = splotch_input_data.size_factors()
+    padded_coordinates, valid_coordinates = get_padded_coordinates(splotch_input_data)
 
     def run_svi(key: KeyArray, counts: Array) -> tuple[dict[str, Array], Array, Array]:
         svi = SVI(
@@ -225,6 +281,8 @@ def run_svi(
             num_categories_per_level=num_categories_per_level,
             counts=counts,
             annotations=annotations,
+            padded_coordinates=padded_coordinates,
+            valid_coordinates=valid_coordinates,
             levels=levels,
             size_factors=size_factors,
             use_zero_inflated=use_zero_inflated,
@@ -253,7 +311,7 @@ def run_svi(
         )
     elif map_method == "vmap":
         samples, params, losses = vmap(run_svi, in_axes=(0, 1))(
-            random.split(key_, len(genes)), counts
+            random.split(key_, len(genes)), jnp.asarray(counts)
         )
     elif map_method == "map":
         gene_res = []
