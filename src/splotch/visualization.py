@@ -46,7 +46,7 @@ def plot_coefficients(
         if aar_idx == 0:
             ax.legend()
 
-    fig.set_tight_layout(True)
+    fig.tight_layout()
 
     return fig
 
@@ -118,7 +118,89 @@ def plot_rates_on_slides(splotch_result: SplotchResult, gene: str) -> Figure:
         cbar = plt.colorbar(cb, ax=ax, shrink=0.8)
         cbar.set_label(f"λ ({gene})")
 
-    fig.set_tight_layout(True)
+    fig.tight_layout()
+
+    return fig
+
+
+def plot_variable_on_slides(
+    splotch_result: SplotchResult, gene: str, variable: str = "f"
+) -> Figure:
+    """Plot variable of interest on slides.
+
+    Variable has to be scalar per spot.
+
+    Args:
+        splotch_result: TBA.
+        gene: TBA.
+        variable: TBA.
+
+    Returns:
+        Matplotlib figure object.
+    """
+    data = splotch_result.rates.loc[gene, :].mean(1)
+    data = splotch_result.posterior_samples[variable][
+        splotch_result.genes.index(gene)
+    ].mean(0)
+    vmin, vmax = np.percentile(data, 5), np.percentile(data, 95)
+
+    count_files = splotch_result.metadata.index.get_level_values("count_file").unique()
+
+    num_cols = 5
+    num_rows = ceil(len(count_files) / num_cols)
+
+    fig = plt.figure()
+    fig.set_size_inches(3 * num_cols, 3 * num_rows)
+
+    for ax_idx, count_file in enumerate(count_files, start=1):
+        ax = fig.add_subplot(num_rows, num_cols, ax_idx)
+
+        tissue_image = Image.open(
+            splotch_result.metadata.query("count_file == @count_file").image_file.iloc[
+                0
+            ]
+        )
+
+        xdim, ydim = tissue_image.size
+
+        # downsample the image
+        tissue_image = tissue_image.resize(
+            (np.round(xdim * 0.05).astype(int), np.round(ydim * 0.05).astype(int))
+        )
+
+        xdim, ydim = tissue_image.size
+        pixel_dim = 194.0 / (6200.0 / xdim)
+
+        x = pixel_dim * (
+            splotch_result.metadata.query("count_file == @count_file").x - 1
+        )
+        y = pixel_dim * (
+            splotch_result.metadata.query("count_file == @count_file").y - 1
+        )
+        c = data[
+            splotch_result.metadata.index.get_level_values("count_file") == count_file
+        ]
+
+        ax.imshow(tissue_image, origin="upper", interpolation="none", alpha=0.6)
+
+        cb = ax.scatter(
+            x, y, s=4, c=c, cmap="RdBu_r", vmin=vmin, vmax=vmax, marker="o", alpha=0.9
+        )
+
+        ax.set_aspect("equal")
+
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+        ax.set_title(
+            f"{count_file}\n"
+            f"{splotch_result.metadata.query('count_file == @count_file').level_1.iloc[0]}"
+        )
+
+        cbar = plt.colorbar(cb, ax=ax, shrink=0.8)
+        cbar.set_label(f"{variable} ({gene})")
+
+    fig.tight_layout()
 
     return fig
 
@@ -167,7 +249,7 @@ def plot_rates_in_common_coordinate_system(
         cbar = plt.colorbar(cb, ax=ax, shrink=0.8)
         cbar.set_label(f"λ ({gene})")
 
-    fig.set_tight_layout(True)
+    fig.tight_layout()
 
     return fig
 
@@ -208,6 +290,86 @@ def plot_annotations_in_common_coordinate_system(
 
     ax.set_title("AARs")
 
-    fig.set_tight_layout(True)
+    fig.tight_layout()
+
+    return fig
+
+
+def plot_annotations_on_slides(splotch_input_data: SplotchInputData) -> Figure:
+    """Plot annotations on slides.
+
+    Args:
+        splotch_input_data: TBA.
+
+    Returns:
+        Matplotlib figure object.
+    """
+    count_files = splotch_input_data.metadata.index.get_level_values(
+        "count_file"
+    ).unique()
+
+    num_cols = 5
+    num_rows = ceil(len(count_files) / num_cols)
+
+    fig = plt.figure()
+    fig.set_size_inches(3 * num_cols, 3 * num_rows)
+
+    aars = list(splotch_input_data.annotation_data.columns)
+
+    for ax_idx, count_file in enumerate(count_files, start=1):
+        ax = fig.add_subplot(num_rows, num_cols, ax_idx)
+
+        tissue_image = Image.open(
+            splotch_input_data.metadata.query(
+                "count_file == @count_file"
+            ).image_file.iloc[0]
+        )
+
+        xdim, ydim = tissue_image.size
+
+        # downsample the image
+        tissue_image = tissue_image.resize(
+            (np.round(xdim * 0.05).astype(int), np.round(ydim * 0.05).astype(int))
+        )
+
+        xdim, ydim = tissue_image.size
+        pixel_dim = 194.0 / (6200.0 / xdim)
+
+        x = pixel_dim * (
+            splotch_input_data.metadata.query("count_file == @count_file").x - 1
+        )
+        y = pixel_dim * (
+            splotch_input_data.metadata.query("count_file == @count_file").y - 1
+        )
+        count_file_annotations = splotch_input_data.metadata.aar[
+            splotch_input_data.metadata.index.get_level_values("count_file")
+            == count_file
+        ]
+
+        ax.imshow(tissue_image, origin="upper", interpolation="none", alpha=0.6)
+
+        for aar in aars:
+            ax.scatter(
+                x[count_file_annotations == aar],
+                y[count_file_annotations == aar],
+                s=5,
+                alpha=0.8,
+                label=aar,
+            )
+
+        ax.set_aspect("equal")
+
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+        ax.set_title(
+            f"{count_file}\n"
+            f"{splotch_input_data.metadata.query('count_file == @count_file').level_1.iloc[0]}"
+        )
+
+        if ax_idx == 1:
+            ax.legend()
+
+    fig.tight_layout()
 
     return fig
