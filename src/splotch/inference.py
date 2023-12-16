@@ -22,7 +22,9 @@ from splotch.utils import SplotchInputData, SplotchResult, get_mcmc_summary
 KeyArray = Array
 
 
-def get_padded_coordinates(splotch_input_data: SplotchInputData) -> tuple[Array, Array]:
+def get_padded_coordinates(
+    splotch_input_data: SplotchInputData,
+) -> tuple[np.ndarray, np.ndarray]:
     """Get padded coordinates.
 
     Args:
@@ -73,6 +75,41 @@ def get_padded_coordinates(splotch_input_data: SplotchInputData) -> tuple[Array,
     return padded_coordinates, valid_coordinates
 
 
+def get_splotch_kwargs(
+    splotch_input_data: SplotchInputData, use_zero_inflated: bool
+) -> dict[str, int | np.ndarray | bool | dict[str, int]]:
+    """Return.
+
+    Args:
+        splotch_input_data: TBA.
+        use_zero_inflated: TBA.
+
+    Returns:
+        Dictionary with data.
+    """
+    num_spots = splotch_input_data.num_spots()
+    num_aars = splotch_input_data.num_aars()
+    num_levels = splotch_input_data.num_levels()
+    num_categories_per_level = splotch_input_data.num_categories_per_level()
+    annotations = splotch_input_data.annotations()
+    levels = splotch_input_data.levels()
+    size_factors = splotch_input_data.size_factors()
+    padded_coordinates, valid_coordinates = get_padded_coordinates(splotch_input_data)
+
+    return {
+        "num_spots": num_spots,
+        "num_aars": num_aars,
+        "num_levels": num_levels,
+        "num_categories_per_level": num_categories_per_level,
+        "annotations": annotations,
+        "padded_coordinates": padded_coordinates,
+        "valid_coordinates": valid_coordinates,
+        "levels": levels,
+        "size_factors": size_factors,
+        "use_zero_inflated": use_zero_inflated,
+    }
+
+
 def run_nuts(
     key: Array,
     genes: list[str],
@@ -99,27 +136,7 @@ def run_nuts(
     def get_model_kwargs(model_kwargs: dict[str, Any], counts: Array) -> dict[str, Any]:
         return model_kwargs | {"counts": counts}
 
-    num_spots = splotch_input_data.num_spots()
-    num_aars = splotch_input_data.num_aars()
-    num_levels = splotch_input_data.num_levels()
-    num_categories_per_level = splotch_input_data.num_categories_per_level()
-    annotations = splotch_input_data.annotations()
-    levels = splotch_input_data.levels()
-    size_factors = splotch_input_data.size_factors()
-    padded_coordinates, valid_coordinates = get_padded_coordinates(splotch_input_data)
-
-    model_kwargs = {
-        "num_spots": num_spots,
-        "num_aars": num_aars,
-        "num_levels": num_levels,
-        "num_categories_per_level": num_categories_per_level,
-        "annotations": annotations,
-        "padded_coordinates": padded_coordinates,
-        "valid_coordinates": valid_coordinates,
-        "levels": levels,
-        "size_factors": size_factors,
-        "use_zero_inflated": use_zero_inflated,
-    }
+    model_kwargs = get_splotch_kwargs(splotch_input_data, use_zero_inflated)
 
     counts = jnp.asarray(splotch_input_data.counts(genes))
 
@@ -259,34 +276,11 @@ def run_svi(
     optim = optim or Adam(step_size=0.1)
     loss = loss or Trace_ELBO(num_particles=10)
 
-    num_spots = splotch_input_data.num_spots()
-    num_aars = splotch_input_data.num_aars()
-    num_levels = splotch_input_data.num_levels()
-    num_categories_per_level = splotch_input_data.num_categories_per_level()
+    model_kwargs = get_splotch_kwargs(splotch_input_data, use_zero_inflated)
     counts = np.asarray(splotch_input_data.counts(genes))
-    annotations = splotch_input_data.annotations()
-    levels = splotch_input_data.levels()
-    size_factors = splotch_input_data.size_factors()
-    padded_coordinates, valid_coordinates = get_padded_coordinates(splotch_input_data)
 
     def run_svi(key: KeyArray, counts: Array) -> tuple[dict[str, Array], Array, Array]:
-        svi = SVI(
-            splotch_v1,
-            guide,
-            optim,
-            loss,
-            num_spots=num_spots,
-            num_aars=num_aars,
-            num_levels=num_levels,
-            num_categories_per_level=num_categories_per_level,
-            counts=counts,
-            annotations=annotations,
-            padded_coordinates=padded_coordinates,
-            valid_coordinates=valid_coordinates,
-            levels=levels,
-            size_factors=size_factors,
-            use_zero_inflated=use_zero_inflated,
-        )
+        svi = SVI(splotch_v1, guide, optim, loss, counts=counts, **model_kwargs)
         key, key_ = random.split(key, 2)
         svi_state = svi.init(key_)
 
