@@ -195,7 +195,7 @@ def register_consensus(
         Returns:
             Rotated points.
         """
-        return np.dot(
+        return np.dot(  # type: ignore[no-any-return]
             np.asarray(
                 [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]
             ),
@@ -211,4 +211,4 @@ def register_consensus(
     theta = values[np.argmax(values[:, 0]), 1]
 
     x_registered = rotate(-theta, x)
-    return x_registered - np.mean(x_registered, 0, keepdims=True)
+    return x_registered - np.mean(x_registered, 0, keepdims=True)  # type: ignore[no-any-return]

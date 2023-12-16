@@ -5,7 +5,7 @@ import numpyro
 import numpyro.distributions as dist
 from jax import Array
 
-# ruff: noqa: N803, N806
+# ruff: noqa: N803, N806, PLR0913, PLR0917, PLR2004
 
 GP_INPUT_DIMENSIONS = 3
 
@@ -90,7 +90,7 @@ def gp(x: Array, L: Array, M: list[int], alpha: Array, length: Array) -> Array:
     spd = jnp.sqrt(diag_spectral_density(alpha, length, L, S))
     with numpyro.plate("basis", S.shape[0]):
         beta = numpyro.sample("beta", dist.Normal(0, 1))
-    return numpyro.deterministic("f", jnp.einsum("ijk,ik->ij", phi, spd * beta))
+    return numpyro.deterministic("f", jnp.einsum("ijk,ik->ij", phi, spd * beta))  # type: ignore[no-any-return]
 
 
 def splotch_v1(
@@ -173,7 +173,7 @@ def splotch_v1(
         padded_coordinates[valid_coordinates], axis=0
     )
     padded_coordinates = padded_coordinates - 0.5 * jnp.max(padded_coordinates, axis=0)
-    num_basis = 10
+    num_basis = 5
     L = jnp.asarray([1.5 * jnp.max(padded_coordinates)])
     M = padded_coordinates.shape[-1] * [num_basis]
     alpha = numpyro.sample("alpha", dist.Gamma(2, 2))

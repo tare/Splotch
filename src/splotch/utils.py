@@ -16,6 +16,8 @@ from scipy.ndimage.morphology import distance_transform_edt
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
 
+# ruff: noqa: PLR2004
+
 
 @dataclass
 class SplotchInputData:
@@ -43,11 +45,11 @@ class SplotchInputData:
 
     def num_aars(self) -> int:
         """Get number of AARs."""
-        return self.annotation_data.shape[1]
+        return self.annotation_data.shape[1]  # type: ignore[no-any-return]
 
     def num_spots(self) -> int:
         """Get number of spots."""
-        return self.count_data.shape[0]
+        return self.count_data.shape[0]  # type: ignore[no-any-return]
 
     def counts(self, genes: list[str] | None = None) -> np.ndarray:
         """Get counts matrix.
@@ -58,7 +60,7 @@ class SplotchInputData:
         Returns:
             Count matrix.
         """
-        return (
+        return (  # type: ignore[no-any-return]
             self.count_data.values
             if genes is None
             else self.count_data.loc[:, genes].values
@@ -66,7 +68,7 @@ class SplotchInputData:
 
     def annotations(self) -> np.ndarray:
         """Get annotations."""
-        return np.argmax(self.annotation_data.values, axis=1)
+        return np.argmax(self.annotation_data.values, axis=1)  # type: ignore[no-any-return]
 
     def levels(self) -> np.ndarray:
         """Get levels."""
@@ -79,11 +81,11 @@ class SplotchInputData:
 
     def aars(self) -> np.ndarray:
         """Get AARs."""
-        return self.annotation_data.columns.values
+        return self.annotation_data.columns.values  # type: ignore[no-any-return]
 
     def size_factors(self) -> np.ndarray:
         """Get size factors."""
-        return self.metadata.size_factor.values
+        return self.metadata.size_factor.values  # type: ignore[no-any-return]
 
 
 @dataclass
@@ -113,8 +115,7 @@ class SplotchResult:
         )
 
     def __add__(self, other: "SplotchResult") -> "SplotchResult":
-        # check that metadata match
-
+        """Combine two SplotchResult objects."""
         if not self.metadata.equals(other.metadata):
             msg = "Metadata are not the same"
             raise ValueError(msg)
@@ -125,7 +126,7 @@ class SplotchResult:
             msg = "Cannot combine results from different methods"
             raise ValueError(msg)
         # SVI
-        if "losses" in self.inference_metrics.keys():
+        if "losses" in self.inference_metrics:
             return SplotchResult(
                 self.metadata,
                 self.genes + other.genes,
@@ -286,10 +287,11 @@ def filter_spots(
     )
 
 
-def get_input_data(
-    metadata: str,
+def process_input_data(
+    metadata_df: pd.DataFrame,
+    counts_df: pd.DataFrame,
+    annotations_df: pd.DataFrame,
     num_levels: int,
-    min_detection_rate: float = 0.02,
     min_total_count: int = 100,
     min_num_spots: int = 10,
     separate_overlapping_tissue_sections: bool = True,
@@ -297,12 +299,13 @@ def get_input_data(
     min_num_spots_per_tissue_section: int = 10,
     seed: int = 0,
 ) -> SplotchInputData:
-    """Get Splotch input data.
+    """Process input data.
 
     Args:
-        metadata: TBA.
+        metadata_df: TBA.
+        counts_df: TBA.
+        annotations_df: TBA.
         num_levels: TBA.
-        min_detection_rate: TBA.
         min_total_count: TBA.
         min_num_spots: TBA.
         separate_overlapping_tissue_sections: TBA.
@@ -313,16 +316,6 @@ def get_input_data(
     Returns:
         Splotch input data.
     """
-    metadata_df = pd.read_csv(metadata, sep="\t")
-    if num_levels not in {1, 2, 3}:
-        msg = "num_levels has to be 1, 2, or 3"
-        raise ValueError(msg)
-
-    counts_df = read_count_files(
-        metadata_df.count_file, min_detection_rate=min_detection_rate
-    )
-    annotations_df = read_annotation_files(metadata_df.annotation_file)
-
     genes = list(counts_df.index)
 
     median_spot_umi_count = counts_df.sum(0).median()
@@ -493,6 +486,57 @@ def get_input_data(
             ],
             axis=1,
         ),
+    )
+
+
+def get_input_data(
+    metadata: str,
+    num_levels: int,
+    min_detection_rate: float = 0.02,
+    min_total_count: int = 100,
+    min_num_spots: int = 10,
+    separate_overlapping_tissue_sections: bool = True,
+    max_num_spots_per_tissue_section: int = 120,
+    min_num_spots_per_tissue_section: int = 10,
+    seed: int = 0,
+) -> SplotchInputData:
+    """Get Splotch input data.
+
+    Args:
+        metadata: TBA.
+        num_levels: TBA.
+        min_detection_rate: TBA.
+        min_total_count: TBA.
+        min_num_spots: TBA.
+        separate_overlapping_tissue_sections: TBA.
+        max_num_spots_per_tissue_section: TBA.
+        min_num_spots_per_tissue_section: TBA.
+        seed: TBA.
+
+    Returns:
+        Splotch input data.
+    """
+    metadata_df = pd.read_csv(metadata, sep="\t")
+    if num_levels not in {1, 2, 3}:
+        msg = "num_levels has to be 1, 2, or 3"
+        raise ValueError(msg)
+
+    counts_df = read_count_files(
+        metadata_df.count_file, min_detection_rate=min_detection_rate
+    )
+    annotations_df = read_annotation_files(metadata_df.annotation_file)
+
+    return process_input_data(
+        metadata_df,
+        counts_df,
+        annotations_df,
+        num_levels,
+        min_total_count,
+        min_num_spots,
+        separate_overlapping_tissue_sections,
+        max_num_spots_per_tissue_section,
+        min_num_spots_per_tissue_section,
+        seed,
     )
 
 
