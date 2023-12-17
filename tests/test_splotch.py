@@ -31,7 +31,25 @@ def test_savagedickey(test_input: tuple[float, float, float, float]) -> None:
     )
 
 
-def test_get_mcmc_summary() -> None:
+@pytest.mark.parametrize(
+    ("test_input", "expected"), [((4, 1_000), (1, 7)), ((4, 1_000, 10), (10, 7))]
+)
+def test_get_mcmc_summary(
+    test_input: tuple[int, ...], expected: tuple[int, ...]
+) -> None:
     """Test get_mcmc_summary()."""
-    posterior_samples = {"mu": np.ones((4, 1000))}
-    assert isinstance(get_mcmc_summary(posterior_samples["mu"]), pd.DataFrame)
+    input_shape = test_input
+    output_shape = expected
+    posterior_samples = {"mu": np.ones(input_shape)}
+    summary_df = get_mcmc_summary(posterior_samples["mu"])
+    assert isinstance(summary_df, pd.DataFrame)
+    assert summary_df.shape == output_shape
+    assert set(summary_df.columns) == {
+        "mean",
+        "std",
+        "median",
+        "5.0%",
+        "95.0%",
+        "n_eff",
+        "r_hat",
+    }
