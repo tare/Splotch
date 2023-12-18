@@ -1,20 +1,19 @@
 """utils.py."""
+import functools
 import logging
-import sys
+import operator
 from dataclasses import dataclass
 from typing import Any, Mapping
 
 import jax.numpy as jnp
+import networkx as nx
 import numpy as np
 import pandas as pd
-import scipy.stats
+import scipy.stats as st
 from jax import Array
 from jax.tree_util import tree_map
 from numpyro.diagnostics import summary
-from scipy.ndimage.measurements import label
-from scipy.ndimage.morphology import distance_transform_edt
-from skimage.feature import peak_local_max
-from skimage.segmentation import watershed
+from scipy.spatial import distance_matrix
 
 # ruff: noqa: PLR2004
 
@@ -294,6 +293,7 @@ def process_input_data(
     num_levels: int,
     min_total_count: int = 100,
     min_num_spots: int = 10,
+    process_input_data: int = 4,
     separate_overlapping_tissue_sections: bool = True,
     max_num_spots_per_tissue_section: int = 120,
     min_num_spots_per_tissue_section: int = 10,
@@ -308,6 +308,7 @@ def process_input_data(
         num_levels: TBA.
         min_total_count: TBA.
         min_num_spots: TBA.
+        process_input_data: TBA.
         separate_overlapping_tissue_sections: TBA.
         max_num_spots_per_tissue_section: TBA.
         min_num_spots_per_tissue_section: TBA.
@@ -362,7 +363,9 @@ def process_input_data(
 
         if sum(valid_spots) < min_num_spots:
             logging.warning(
-                "%s has less than %d valid spots", count_file, min_num_spots
+                "%s has less than %d valid spots. Maybe coordinates do not match in count files and annotations.",
+                count_file,
+                min_num_spots,
             )
 
         # subset to the valid spots
@@ -382,26 +385,36 @@ def process_input_data(
         )
 
         logging.info("Detecting distinct tissue sections on the slide")
-        (
-            tissue_section_labels,
-            spots_tissue_section_labeled,
-            coordinates_discretized,
-        ) = detect_tissue_sections(
+        tissue_sections = detect_tissue_sections(
             coordinates,
-            separate_overlapping_tissue_sections,
-            max_num_spots_per_tissue_section,
-            min_num_spots_per_tissue_section,
-            seed=seed,
         )
 
-        for tissue_section_label in tissue_section_labels:
-            # find the indices of the spots of the current tissue section
-            tissue_section_indices = (
-                spots_tissue_section_labeled[
-                    coordinates_discretized[:, 0], coordinates_discretized[:, 1]
-                ]
-                == tissue_section_label
+        if separate_overlapping_tissue_sections:
+            logging.info("Separating tissue sections on the slide")
+            tissue_sections = separate_tissue_sections(
+                coordinates, tissue_sections, max_num_spots_per_tissue_section, seed
             )
+
+        tissue_section_labels = np.asarray(
+            [
+                [idx in tissue_section for tissue_section in tissue_sections].index(
+                    True
+                )
+                for idx in range(len(coordinates))
+            ]
+        )
+
+        for tissue_section_label in np.unique(tissue_section_labels):
+            # find the indices of the spots of the current tissue section
+            tissue_section_indices = tissue_section_labels == tissue_section_label
+
+            # discard those tissue sections that are unexpectedly small
+            if sum(tissue_section_indices) <= min_num_spots_per_tissue_section:
+                logging.warning(
+                    "Discarding a tissue section with %d spots",
+                    sum(tissue_section_indices),
+                )
+                continue
 
             # subset to the spots of the current tissue section
             (
@@ -495,7 +508,8 @@ def get_input_data(
     min_detection_rate: float = 0.02,
     min_total_count: int = 100,
     min_num_spots: int = 10,
-    separate_overlapping_tissue_sections: bool = True,
+    number_of_neighbors: int = 4,
+    separate_overlapping_tissue_sections: bool = False,
     max_num_spots_per_tissue_section: int = 120,
     min_num_spots_per_tissue_section: int = 10,
     seed: int = 0,
@@ -509,6 +523,7 @@ def get_input_data(
         min_total_count: TBA.
         min_num_spots: TBA.
         separate_overlapping_tissue_sections: TBA.
+        number_of_neighbors: TBA.
         max_num_spots_per_tissue_section: TBA.
         min_num_spots_per_tissue_section: TBA.
         seed: TBA.
@@ -533,6 +548,7 @@ def get_input_data(
         num_levels,
         min_total_count,
         min_num_spots,
+        number_of_neighbors,
         separate_overlapping_tissue_sections,
         max_num_spots_per_tissue_section,
         min_num_spots_per_tissue_section,
@@ -562,10 +578,8 @@ def savagedickey(
         Savage-Dickey density ratio value.
     """
     delta_theta = (theta_1[:, None] - theta_2).flatten()
-    denominator: float = scipy.stats.kde.gaussian_kde(
-        delta_theta, bw_method="scott"
-    ).evaluate(0)[0]
-    numerator: float = scipy.stats.norm.pdf(
+    denominator: float = st.gaussian_kde(delta_theta, bw_method="scott").evaluate(0)[0]
+    numerator: float = st.norm.pdf(
         0,
         loc=mu_1 - mu_2,
         scale=np.sqrt(np.square(sigma_1) + np.square(sigma_2)),
@@ -574,140 +588,124 @@ def savagedickey(
     return numerator / denominator
 
 
-def watershed_tissue_sections(
-    curr_label: int,
-    labeled_array: np.ndarray,
-    new_label: int,
-    min_distance: int = 6,
-    noise_magnitude: float = 0.05,
-    seed: int = 0,
+def get_spot_adjacency_matrix(
+    coordinates: np.ndarray, number_of_neighbors: int
 ) -> np.ndarray:
-    """Watershed segmentation to separate overlapping tissue sections.
+    """Get spot adjacency matrix.
 
     Args:
-        curr_label: TBA.
-        labeled_array: TBA.
-        new_label: TBA.
-        min_distance: TBA.
-        noise_magnitude: TBA.
-        seed: TBA.
+        coordinates: TBA.
+        number_of_neighbors: TBA.
 
     Returns:
-        Labeled array.
+        TBA.
     """
-    labeled_array_tmp = 1 * labeled_array
-    labeled_array_tmp[labeled_array_tmp != curr_label] = 0
-    labeled_array_tmp[labeled_array_tmp > 0] = 1
-
-    distance = distance_transform_edt(labeled_array_tmp)
-
-    while True:
-        peak_indices = peak_local_max(
-            distance
-            + noise_magnitude
-            * np.random.default_rng(seed).uniform(size=labeled_array_tmp.shape),
-            min_distance=min_distance,
-            labels=labeled_array_tmp,
-        )
-
-        # we are done if we got two distinct classes
-        if len(peak_indices) == 2:
-            break
-        # otherwise reduce the minimum distance
-        min_distance = min_distance - 1
-
-        if min_distance == 0:
-            logging.critical("Watershedding failed!")
-            sys.exit(1)
-
-    local_maxi = np.zeros(labeled_array_tmp.shape)
-    for peak_index in peak_indices[0:2]:
-        local_maxi[peak_index[0], peak_index[1]] = 1
-
-    markers = label(local_maxi)[0]
-    labeled_array_new = watershed(-distance, markers, mask=labeled_array_tmp)
-
-    if np.max(labeled_array_new) != 2:
-        logging.critical(
-            "Watershed gave %d objects instead of 2!", np.max(labeled_array_new)
-        )
-        sys.exit(1)
-    else:
-        logging.info("Watershed gave %d objects!", np.max(labeled_array_new))
-
-    labeled_array[labeled_array_new == 2] = new_label
-
-    return labeled_array
+    coordinates_distance_matrix = distance_matrix(coordinates, coordinates)
+    threshold = np.min(
+        np.sort(coordinates_distance_matrix, axis=0)[number_of_neighbors + 1, :]
+    )
+    return np.logical_and(  # type: ignore[no-any-return]
+        coordinates_distance_matrix < threshold, coordinates_distance_matrix > 0
+    )
 
 
 def detect_tissue_sections(
     coordinates: np.ndarray,
-    separate_overlapping_tissue_sections: bool = False,
-    max_num_spots: int = 120,
-    min_num_spots: int = 10,
-    seed: int = 0,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    number_of_neighbors: int,
+) -> list[set[int]]:
     """Detect tissue sections.
 
     Args:
         coordinates: Coordinates of the spots on the slide.
-        separate_overlapping_tissue_sections: Whether check for overlapping tissue sections.
-        max_num_spots: Tissue sections with more than this many spots are assumed to be overlapping.
-        min_num_spots: Tissue sections with less than this many spots are discarded.
+        number_of_neighbors: TBA.
+
+    Returns:
+        TBA.
+    """
+    adjacency_matrix = get_spot_adjacency_matrix(coordinates, number_of_neighbors)
+    spot_graph = nx.from_numpy_array(adjacency_matrix)
+
+    tissue_sections = list(
+        nx.algorithms.components.connected.connected_components(spot_graph)
+    )
+
+    logging.info("Found %d candidate tissue sections", len(tissue_sections))
+
+    return tissue_sections
+
+
+def separate_tissue_sections(
+    coordinates: np.ndarray,
+    tissue_sections: list[set[int]],
+    number_of_neighbors: int,
+    max_num_spots_per_tissue_section: int,
+    seed: int,
+) -> list[set[int]]:
+    """Separate tissue sections.
+
+    Args:
+        coordinates: TBA.
+        tissue_sections: TBA.
+        number_of_neighbors: TBA.
+        max_num_spots_per_tissue_section: TBA.
+        seed: TBA.
+
+    Return:
+        TBA.
+    """
+    adjacency_matrix = get_spot_adjacency_matrix(coordinates, number_of_neighbors)
+
+    while (
+        max(len(tissue_section) for tissue_section in tissue_sections)
+        > max_num_spots_per_tissue_section
+    ):
+        tissue_sections = functools.reduce(
+            operator.iconcat,
+            [
+                [tissue_section]
+                if len(tissue_section) <= max_num_spots_per_tissue_section
+                else separate_tissue_section(tissue_section, adjacency_matrix, seed)
+                for tissue_section in tissue_sections
+            ],
+            [],
+        )
+
+    logging.info(
+        "We have %d candidate tissue sections after the tissue section separation step",
+        len(tissue_sections),
+    )
+
+    return tissue_sections
+
+
+def separate_tissue_section(
+    tissue_section: set[int],
+    adjacency_matrix: np.ndarray,
+    seed: int = 0,
+) -> list[set[int]]:
+    """Separate overlapping tissue sections.
+
+    Args:
+        tissue_section: TBA.
+        adjacency_matrix: TBA.
         seed: TBA.
 
     Returns:
         TBA.
     """
-    spot_array = np.zeros((40, 40))
-
-    coordinates_discretized = np.round(coordinates).astype(int)
-    spot_array[coordinates_discretized[:, 0], coordinates_discretized[:, 1]] = 1
-
-    labeled_array, _ = label(spot_array, [[0, 1, 0], [1, 1, 1], [0, 1, 0]])
-
-    unique_labels, unique_label_counts = np.unique(
-        labeled_array * spot_array, return_counts=True
+    logging.warning(
+        "Tissue section has %d spots. Let us try to break the tissue section into two.",
+        len(tissue_section),
     )
-
-    logging.info("Found %d candidate tissue sections", np.max(unique_labels.max()) + 1)
-
-    # this is used to label new tissue sections obtained by watershedding
-    new_label = np.max(unique_labels) + 1
-
-    # check for overlapping tissue sections
-    if separate_overlapping_tissue_sections:
-        for unique_label, count in zip(unique_labels, unique_label_counts):
-            # skip background
-            if unique_label == 0:
-                continue
-            if count > max_num_spots:
-                logging.warning(
-                    "Tissue section has %d spots. Let us try to break the tissue section into two.",
-                    count,
-                )
-
-                labeled_array = watershed_tissue_sections(
-                    unique_label, labeled_array, new_label, seed
-                )
-                new_label = new_label + 1
-
-    unique_labels, unique_label_counts = np.unique(
-        labeled_array * spot_array, return_counts=True
+    indices = np.asarray(sorted(tissue_section))
+    spot_graph = nx.from_numpy_array(adjacency_matrix[np.ix_(indices, indices)])
+    mapping = {idx: indices[idx] for idx in range(len(indices))}
+    spot_graph = nx.relabel_nodes(spot_graph, mapping)
+    return list(
+        nx.algorithms.community.kernighan_lin.kernighan_lin_bisection(
+            spot_graph, seed=seed
+        )
     )
-
-    # discard those tissue sections that are unexpectedly small
-    for idx in range(len(unique_label_counts)):
-        if unique_label_counts[idx] < min_num_spots:
-            labeled_array[labeled_array == unique_labels[idx]] = 0
-    labeled_array = labeled_array * spot_array
-
-    unique_labels = np.unique(labeled_array)
-    unique_labels = unique_labels[unique_labels > 0]
-
-    logging.info("Keeping %d tissue sections", len(unique_labels))
-
-    return unique_labels, labeled_array, coordinates_discretized
 
 
 def get_mcmc_summary(posterior_samples: Array) -> pd.DataFrame:
