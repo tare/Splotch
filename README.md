@@ -6,14 +6,11 @@ Splotch is a hierarchical generative probabilistic model for analyzing Spatial T
 
 - Supports complex hierarchical experimental designs and model-based analysis of replicates
 - Full Bayesian inference with Hamiltonian Monte Carlo (HMC) using the adaptive HMC sampler as implemented in NumPyro [[2]](#references)
+  - CPU, GPU, and TPU support
 - Analysis of expression differences between anatomical regions and conditions using posterior samples
 - Different anatomical annotated regions (AARs) are modeled using a linear model
 - Zero-inflated Poisson or Poisson likelihood
 - Gaussian Process prior for spatial random effect
-
-We currently support the original ST array design (1007 spots, a diameter of 100 μm, and a center-to-center distance of 200 μm) by [Spatial Transcriptomics AB](https://spatialtranscriptomics.com).
-
-We will update our code as soon as [Visium Spatial Gene Expression Solution](https://www.10xgenomics.com/spatial-transcriptomics/) by [10x Genomics, Inc.](https://www.10xgenomics.com) becomes available.
 
 The Splotch code in this repository supports single-, two-, and three-level experimental designs.
 
@@ -100,11 +97,11 @@ The metadata table has the following TSV file format
 | CN93_E1   | G93A p120 | M       | 975     | count_tables/CN93_E1_stdata_aligned_counts_IDs.txt.unified.tsv   | annotations/CN93_E1.tsv   | images/CN93_E1_HE.jpg   |
 | CN93_E2   | G93A p120 | M       | 975     | count_tables/CN93_E2_stdata_aligned_counts_IDs.txt.unified.tsv   | annotations/CN93_E2.tsv   | images/CN93_E2_HE.jpg   |
 
-Each sample (i.e. slide) has its own row in the metadata table. The columns `level_1`, `level_2`, and `level_3` define how the samples are analyzed using the linear hierarchical AAR model. The columns `level_1`, `count_file`, and `annotation_file` are mandatory. The column `level_2` is mandatory when using the two-level model. Similarly, the columns `level_2` and `level_3` are mandatory when using the three-level model.
+Each sample (i.e. slide) has its own row in the metadata table. The columns `level_1`, `level_2`, and `level_3` define how the samples are analyzed using the linear hierarchical AAR model. The columns `level_1`, `count_file`, and `annotation_file` are mandatory. The column `level_2` is mandatory when using the two-level model. Similarly, the columns `level_2` and `level_3` are mandatory when using the three-level model. At the moment we only support categorical variables.
+
+If a given slide contains tissue sections from multiple biological conditions in terms of the explanatory variables, then it is recommended to split the tissue sections into multiple count files so that the design matrix can be defined accordingly.
 
 The user can include additional columns at their own discretion. For instance, we will use the column `image_file` in the [tutorials](tutorials/).
-
-The metadata table containing information about the provided example data set can be found at `examples/metadata.tsv`.
 
 ### Example data
 
