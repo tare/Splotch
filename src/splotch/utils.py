@@ -15,7 +15,7 @@ from jax.tree_util import tree_map
 from numpyro.diagnostics import summary
 from scipy.spatial import distance_matrix
 
-# ruff: noqa: PLR2004
+# ruff: noqa: PLR2004, PLR0913, PLR0917
 
 
 @dataclass
@@ -153,9 +153,75 @@ class SplotchResult:
         )
 
 
-def read_count_files(
-    count_files: list[str], min_detection_rate: float = 0.02
-) -> pd.DataFrame:
+@dataclass
+class SpotData:
+    """Spot data."""
+
+    genes: list[str]
+    level_values: pd.Series
+    metadata: pd.Series
+    coordinates_orig: np.ndarray  # type: ignore[type-arg]
+    spot_counts: np.ndarray  # type: ignore[type-arg]
+    annotations_df: pd.DataFrame
+
+    def __post_init__(self) -> None:
+        """Post init steps."""
+        self.coordinates = np.asarray(
+            [
+                [float(val) for val in coordinate.split("_")]
+                for coordinate in self.coordinates_orig
+            ]
+        )
+        if self.coordinates.shape[1] != 2:
+            msg = "Unable not find x and y coordinates. Ensure the naming pattern is 'x_y'."
+            ValueError(msg)
+        if len(self.genes) != self.spot_counts.shape[1]:
+            msg = "Number of genes do not match"
+            ValueError(msg)
+        if (
+            len(self.coordinates_orig) != len(self.coordinates)
+            or len(self.coordinates_orig) != self.spot_counts.shape[0]
+        ):
+            msg = "Number of coordinates do not match"
+            ValueError()
+
+        self.total_counts = np.sum(self.spot_counts, axis=1)
+
+        logging.info("Start with %d spots", len(self.coordinates_orig))
+        indices = np.asarray(
+            [
+                not (
+                    coordinate not in self.annotations_df.columns
+                    or self.annotations_df[coordinate].sum() != 1
+                )
+                for coordinate in self.coordinates_orig
+            ]
+        )
+        if sum(~indices) > 0:
+            logging.info("Discard %d spots due to annotation issues", sum(~indices))
+        self.coordinates_orig = self.coordinates_orig[indices]
+        self.annotations_df = self.annotations_df[self.coordinates_orig]
+        self.coordinates = self.coordinates[indices, :]
+        self.spot_counts = self.spot_counts[indices, :]
+        self.total_counts = self.total_counts[indices]
+
+    def select(self, indices: np.ndarray) -> "SpotData":
+        """Return object with selected values."""
+        return SpotData(
+            self.genes,
+            self.level_values,
+            self.metadata,
+            self.coordinates_orig[indices],
+            self.spot_counts[indices, :],
+            self.annotations_df.loc[:, indices],
+        )
+
+    def __len__(self) -> int:
+        """Get the number of spots."""
+        return len(self.coordinates_orig)
+
+
+def read_count_files(count_files: list[str], min_detection_rate: float) -> pd.DataFrame:
     """Read count files.
 
     Args:
@@ -182,7 +248,7 @@ def read_count_files(
     counts_df = counts_df.fillna(0).astype(int)
 
     counts_df = counts_df[
-        ((counts_df > 0).sum(axis=1) / counts_df.shape[1]) > min_detection_rate
+        ((counts_df > 0).sum(axis=1) / counts_df.shape[1]) >= min_detection_rate
     ]
     logging.info(
         ("We have unique %d genes with sufficient detection rate (>= %f)"),
@@ -228,62 +294,67 @@ def read_annotation_files(annotation_files: list[str]) -> pd.DataFrame:
     return annotation_df
 
 
-def process_array(
-    counts_df: pd.DataFrame,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Process array.
+def get_tissue_section_output_data(
+    tissue_section_spot_data: SpotData,
+    tissue_section_idx: int,
+    count_file: str,
+    median_spot_umi_count: int,
+) -> tuple[
+    pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame
+]:
+    """TBA.
 
     Args:
-        counts_df: TBA.
-
-    Returns:
-        TBA.
+        tissue_section_spot_data: TBA.
+        tissue_section_idx: TBA.
+        count_file: TBA.
+        median_spot_umi_count: TBA.
     """
-    coordinates_orig = np.asarray(list(counts_df.columns))
-    coordinates = np.asarray(
+    spot_multiindex = pd.MultiIndex.from_arrays(
         [
-            [float(val) for val in coordinate.split("_")]
-            for coordinate in coordinates_orig
-        ]
+            [count_file] * len(tissue_section_spot_data),
+            [tissue_section_idx] * len(tissue_section_spot_data),
+            tissue_section_spot_data.coordinates_orig,
+        ],
+        names=("count_file", "tissue_section", "coordinate"),
     )
-    spot_counts = counts_df.values.T
-    total_counts = np.sum(spot_counts, axis=1)
-    return coordinates_orig, coordinates, spot_counts, total_counts
 
+    tissue_section_annotations_df = tissue_section_spot_data.annotations_df.T
+    tissue_section_annotations_df.index = spot_multiindex
 
-def filter_spots(
-    indices: np.ndarray,
-    coordinates_orig: np.ndarray,
-    coordinates: np.ndarray,
-    spot_counts: np.ndarray,
-    total_counts: np.ndarray,
-    array_annotations_df: pd.DataFrame,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, pd.DataFrame]:
-    """Filter spot data.
-
-    Args:
-        indices: TBA.
-        coordinates_orig: TBA.
-        coordinates: TBA.
-        spot_counts: TBA.
-        total_counts: TBA.
-        array_annotations_df: TBA.
-
-    Returns:
-        TBA.
-    """
-    coordinates_orig = coordinates_orig[indices]
-    coordinates = coordinates[indices, :]
-    spot_counts = spot_counts[indices, :]
-    total_counts = total_counts[indices]
-    array_annotations_df = array_annotations_df.loc[:, indices]
-    return (
-        coordinates_orig,
-        coordinates,
-        spot_counts,
-        total_counts,
-        array_annotations_df,
+    size_factor_df = pd.DataFrame(
+        tissue_section_spot_data.total_counts / median_spot_umi_count,
+        index=spot_multiindex,
+        columns=("size_factor",),
     )
+    level_df = pd.DataFrame(
+        np.tile(
+            tissue_section_spot_data.level_values.values,
+            (len(tissue_section_spot_data), 1),
+        ),
+        index=spot_multiindex,
+        columns=tissue_section_spot_data.level_values.index,
+    )
+    metadata_df = pd.DataFrame(
+        np.tile(
+            tissue_section_spot_data.metadata.values, (len(tissue_section_spot_data), 1)
+        ),
+        index=spot_multiindex,
+        columns=tissue_section_spot_data.metadata.index,
+    )
+    count_df = pd.DataFrame(
+        tissue_section_spot_data.spot_counts,
+        index=spot_multiindex,
+        columns=tissue_section_spot_data.genes,
+    )
+    annotation_df = tissue_section_annotations_df
+    coordinate_df = pd.DataFrame(
+        tissue_section_spot_data.coordinates,
+        index=spot_multiindex,
+        columns=("x", "y"),
+    )
+
+    return size_factor_df, level_df, metadata_df, count_df, annotation_df, coordinate_df
 
 
 def process_input_data(
@@ -292,8 +363,8 @@ def process_input_data(
     annotations_df: pd.DataFrame,
     num_levels: int,
     min_total_count: int = 100,
-    min_num_spots: int = 10,
-    number_of_neighbors: int = 4,
+    min_num_spots_per_slide: int = 10,
+    num_of_neighbors: int = 8,
     separate_overlapping_tissue_sections: bool = True,
     max_num_spots_per_tissue_section: int = 120,
     min_num_spots_per_tissue_section: int = 10,
@@ -306,12 +377,12 @@ def process_input_data(
         counts_df: TBA.
         annotations_df: TBA.
         num_levels: TBA.
-        min_total_count: TBA.
-        min_num_spots: TBA.
-        number_of_neighbors: TBA.
-        separate_overlapping_tissue_sections: TBA.
-        max_num_spots_per_tissue_section: TBA.
-        min_num_spots_per_tissue_section: TBA.
+        min_total_count: TBA. Defaults to 100.
+        min_num_spots_per_slide: TBA. Defaults to 10.
+        num_of_neighbors: TBA. Defaults to 8.
+        separate_overlapping_tissue_sections: TBA. Defaults to True.
+        max_num_spots_per_tissue_section: TBA. Defaults to 120.
+        min_num_spots_per_tissue_section: TBA. Defaults to 10.
         seed: TBA.
 
     Returns:
@@ -330,72 +401,61 @@ def process_input_data(
 
     tissue_section_idx = 0
 
-    for count_file, annotation_file in zip(
-        counts_df.columns.unique(level="file"),
-        annotations_df.columns.unique(level="file"),
-    ):
+    for count_file in counts_df.columns.unique(level="file"):
         logging.info("Processing %s", count_file)
-        coordinates_orig, coordinates, spot_counts, total_counts = process_array(
-            counts_df[count_file]
-        )
 
-        array_level_values = metadata_df[metadata_df.count_file == count_file][
+        coordinates_orig = np.asarray(list(counts_df[count_file].columns))
+        spot_counts = counts_df[count_file].values.T
+
+        annotation_file = metadata_df[metadata_df.count_file == count_file][
+            "annotation_file"
+        ].iloc[0]
+        array_annotations_df = annotations_df[annotation_file]
+
+        level_values = metadata_df[metadata_df.count_file == count_file][
             [f"level_{level_idx+1}" for level_idx in range(num_levels)]
         ].iloc[0]
 
-        array_metadata = metadata_df[metadata_df.count_file == count_file][
+        metadata = metadata_df[metadata_df.count_file == count_file][
             ["annotation_file", "image_file"]
         ].iloc[0]
 
-        array_annotations_df = annotations_df[annotation_file]
-
-        # valid spot has enough UMIs, it is annotated, and it belongs to one aar
-        valid_spots = np.asarray(
-            [
-                not (
-                    total_count < min_total_count
-                    or coordinate not in array_annotations_df.columns
-                    or array_annotations_df[coordinate].sum() != 1
-                )
-                for coordinate, total_count in zip(coordinates_orig, total_counts)
-            ]
+        count_file_spot_data = SpotData(
+            genes,
+            level_values,
+            metadata,
+            coordinates_orig,
+            spot_counts,
+            array_annotations_df,
         )
 
-        if sum(valid_spots) < min_num_spots:
+        indices = count_file_spot_data.total_counts > min_total_count
+        if np.sum(~indices) > 0:
             logging.warning(
-                "%s has less than %d valid spots. Maybe coordinates do not match in count files and annotations.",
-                count_file,
-                min_num_spots,
+                "Discarding %d spots due to low sequencing depth.",
+                np.sum(~indices),
             )
+        count_file_spot_data = count_file_spot_data.select(indices)
 
-        # subset to the valid spots
-        (
-            coordinates_orig,
-            coordinates,
-            spot_counts,
-            total_counts,
-            array_annotations_df,
-        ) = filter_spots(
-            valid_spots,
-            coordinates_orig,
-            coordinates,
-            spot_counts,
-            total_counts,
-            array_annotations_df,
-        )
+        if sum(indices) < min_num_spots_per_slide:
+            logging.warning(
+                "%s has less than %d valid spots. Maybe coordinates do not match in the count and annotation files.",
+                count_file,
+                sum(indices),
+            )
 
         logging.info("Detecting distinct tissue sections on the slide")
         tissue_sections = detect_tissue_sections(
-            coordinates,
-            number_of_neighbors,
+            count_file_spot_data.coordinates,
+            num_of_neighbors,
         )
 
         if separate_overlapping_tissue_sections:
             logging.info("Separating tissue sections on the slide")
             tissue_sections = separate_tissue_sections(
-                coordinates,
+                count_file_spot_data.coordinates,
                 tissue_sections,
-                number_of_neighbors,
+                num_of_neighbors,
                 max_num_spots_per_tissue_section,
                 seed,
             )
@@ -405,7 +465,7 @@ def process_input_data(
                 [idx in tissue_section for tissue_section in tissue_sections].index(
                     True
                 )
-                for idx in range(len(coordinates))
+                for idx in range(len(count_file_spot_data))
             ]
         )
 
@@ -422,69 +482,29 @@ def process_input_data(
                 continue
 
             # subset to the spots of the current tissue section
+            tissue_section_spot_data = count_file_spot_data.select(
+                tissue_section_indices
+            )
+
             (
-                tissue_section_coordinates_orig,
-                tissue_section_coordinates,
-                tissue_section_spot_counts,
-                tissue_section_total_counts,
-                tissue_section_annotations_df,
-            ) = filter_spots(
-                tissue_section_indices,
-                coordinates_orig,
-                coordinates,
-                spot_counts,
-                total_counts,
-                array_annotations_df,
+                tissue_section_size_factor_df,
+                tissue_section_level_df,
+                tissue_section_metadata_df,
+                tissue_section_count_df,
+                tissue_section_annotation_df,
+                tissue_section_coordinate_df,
+            ) = get_tissue_section_output_data(
+                tissue_section_spot_data,
+                tissue_section_idx,
+                count_file,
+                median_spot_umi_count,
             )
-
-            spot_multiindex = pd.MultiIndex.from_arrays(
-                [
-                    [count_file] * np.sum(tissue_section_indices),
-                    [tissue_section_idx] * np.sum(tissue_section_indices),
-                    tissue_section_coordinates_orig,
-                ],
-                names=("count_file", "tissue_section", "coordinate"),
-            )
-
-            tissue_section_annotations_df = tissue_section_annotations_df.T
-            tissue_section_annotations_df.index = spot_multiindex
-
-            size_factor_dfs.append(
-                pd.DataFrame(
-                    tissue_section_total_counts / median_spot_umi_count,
-                    index=spot_multiindex,
-                    columns=("size_factor",),
-                )
-            )
-            level_dfs.append(
-                pd.DataFrame(
-                    np.tile(
-                        array_level_values.values, (np.sum(tissue_section_indices), 1)
-                    ),
-                    index=spot_multiindex,
-                    columns=array_level_values.index,
-                )
-            )
-            metadata_dfs.append(
-                pd.DataFrame(
-                    np.tile(array_metadata.values, (np.sum(tissue_section_indices), 1)),
-                    index=spot_multiindex,
-                    columns=array_metadata.index,
-                )
-            )
-            count_dfs.append(
-                pd.DataFrame(
-                    tissue_section_spot_counts, index=spot_multiindex, columns=genes
-                )
-            )
-            annotation_dfs.append(tissue_section_annotations_df)
-            coordinate_dfs.append(
-                pd.DataFrame(
-                    tissue_section_coordinates,
-                    index=spot_multiindex,
-                    columns=("x", "y"),
-                )
-            )
+            size_factor_dfs.append(tissue_section_size_factor_df)
+            level_dfs.append(tissue_section_level_df)
+            metadata_dfs.append(tissue_section_metadata_df)
+            count_dfs.append(tissue_section_count_df)
+            annotation_dfs.append(tissue_section_annotation_df)
+            coordinate_dfs.append(tissue_section_coordinate_df)
 
             tissue_section_idx += 1
 
@@ -512,8 +532,8 @@ def get_input_data(
     num_levels: int,
     min_detection_rate: float = 0.02,
     min_total_count: int = 100,
-    min_num_spots: int = 10,
-    number_of_neighbors: int = 4,
+    min_num_spots_per_slide: int = 10,
+    num_of_neighbors: int = 8,
     separate_overlapping_tissue_sections: bool = False,
     max_num_spots_per_tissue_section: int = 120,
     min_num_spots_per_tissue_section: int = 10,
@@ -524,14 +544,14 @@ def get_input_data(
     Args:
         metadata: TBA.
         num_levels: TBA.
-        min_detection_rate: TBA.
-        min_total_count: TBA.
-        min_num_spots: TBA.
-        separate_overlapping_tissue_sections: TBA.
-        number_of_neighbors: TBA.
-        max_num_spots_per_tissue_section: TBA.
-        min_num_spots_per_tissue_section: TBA.
-        seed: TBA.
+        min_detection_rate: TBA. Defaults to 0.02.
+        min_total_count: TBA. Defaults to 100.
+        min_num_spots_per_slide: TBA. Defaults to 10.
+        num_of_neighbors: TBA. Defaults to 8.
+        separate_overlapping_tissue_sections: TBA. Defaults to False.
+        max_num_spots_per_tissue_section: TBA. Defaults to 120.
+        min_num_spots_per_tissue_section: TBA. Defaults to 10.
+        seed: TBA. Defaults to 0.
 
     Returns:
         Splotch input data.
@@ -539,6 +559,10 @@ def get_input_data(
     metadata_df = pd.read_csv(metadata, sep="\t")
     if num_levels not in {1, 2, 3}:
         msg = "num_levels has to be 1, 2, or 3"
+        raise ValueError(msg)
+
+    if len(metadata_df.count_file) != len(set(metadata_df.count_file)):
+        msg = "count_file values are not unique"
         raise ValueError(msg)
 
     counts_df = read_count_files(
@@ -552,8 +576,8 @@ def get_input_data(
         annotations_df,
         num_levels,
         min_total_count,
-        min_num_spots,
-        number_of_neighbors,
+        min_num_spots_per_slide,
+        num_of_neighbors,
         separate_overlapping_tissue_sections,
         max_num_spots_per_tissue_section,
         min_num_spots_per_tissue_section,
@@ -594,20 +618,20 @@ def savagedickey(
 
 
 def get_spot_adjacency_matrix(
-    coordinates: np.ndarray, number_of_neighbors: int
+    coordinates: np.ndarray, num_of_neighbors: int
 ) -> np.ndarray:
     """Get spot adjacency matrix.
 
     Args:
         coordinates: TBA.
-        number_of_neighbors: TBA.
+        num_of_neighbors: TBA.
 
     Returns:
         TBA.
     """
     coordinates_distance_matrix = distance_matrix(coordinates, coordinates)
     threshold = np.min(
-        np.sort(coordinates_distance_matrix, axis=0)[number_of_neighbors + 1, :]
+        np.sort(coordinates_distance_matrix, axis=0)[num_of_neighbors + 1, :]
     )
     return np.logical_and(  # type: ignore[no-any-return]
         coordinates_distance_matrix < threshold, coordinates_distance_matrix > 0
@@ -616,18 +640,18 @@ def get_spot_adjacency_matrix(
 
 def detect_tissue_sections(
     coordinates: np.ndarray,
-    number_of_neighbors: int,
+    num_of_neighbors: int,
 ) -> list[set[int]]:
     """Detect tissue sections.
 
     Args:
         coordinates: Coordinates of the spots on the slide.
-        number_of_neighbors: TBA.
+        num_of_neighbors: TBA.
 
     Returns:
         TBA.
     """
-    adjacency_matrix = get_spot_adjacency_matrix(coordinates, number_of_neighbors)
+    adjacency_matrix = get_spot_adjacency_matrix(coordinates, num_of_neighbors)
     spot_graph = nx.from_numpy_array(adjacency_matrix)
 
     tissue_sections = list(
@@ -642,7 +666,7 @@ def detect_tissue_sections(
 def separate_tissue_sections(
     coordinates: np.ndarray,
     tissue_sections: list[set[int]],
-    number_of_neighbors: int,
+    num_of_neighbors: int,
     max_num_spots_per_tissue_section: int,
     seed: int,
 ) -> list[set[int]]:
@@ -651,14 +675,14 @@ def separate_tissue_sections(
     Args:
         coordinates: TBA.
         tissue_sections: TBA.
-        number_of_neighbors: TBA.
+        num_of_neighbors: TBA.
         max_num_spots_per_tissue_section: TBA.
         seed: TBA.
 
     Return:
         TBA.
     """
-    adjacency_matrix = get_spot_adjacency_matrix(coordinates, number_of_neighbors)
+    adjacency_matrix = get_spot_adjacency_matrix(coordinates, num_of_neighbors)
 
     while (
         max(len(tissue_section) for tissue_section in tissue_sections)
