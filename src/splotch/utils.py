@@ -293,7 +293,7 @@ def process_input_data(
     num_levels: int,
     min_total_count: int = 100,
     min_num_spots: int = 10,
-    process_input_data: int = 4,
+    number_of_neighbors: int = 4,
     separate_overlapping_tissue_sections: bool = True,
     max_num_spots_per_tissue_section: int = 120,
     min_num_spots_per_tissue_section: int = 10,
@@ -308,7 +308,7 @@ def process_input_data(
         num_levels: TBA.
         min_total_count: TBA.
         min_num_spots: TBA.
-        process_input_data: TBA.
+        number_of_neighbors: TBA.
         separate_overlapping_tissue_sections: TBA.
         max_num_spots_per_tissue_section: TBA.
         min_num_spots_per_tissue_section: TBA.
@@ -387,12 +387,17 @@ def process_input_data(
         logging.info("Detecting distinct tissue sections on the slide")
         tissue_sections = detect_tissue_sections(
             coordinates,
+            number_of_neighbors,
         )
 
         if separate_overlapping_tissue_sections:
             logging.info("Separating tissue sections on the slide")
             tissue_sections = separate_tissue_sections(
-                coordinates, tissue_sections, max_num_spots_per_tissue_section, seed
+                coordinates,
+                tissue_sections,
+                number_of_neighbors,
+                max_num_spots_per_tissue_section,
+                seed,
             )
 
         tissue_section_labels = np.asarray(
