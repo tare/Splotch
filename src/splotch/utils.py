@@ -15,6 +15,8 @@ from jax.tree_util import tree_map
 from numpyro.diagnostics import summary
 from scipy.spatial import distance_matrix
 
+logger = logging.getLogger(__name__)
+
 # ruff: noqa: PLR2004, PLR0913, PLR0917
 
 
@@ -170,24 +172,22 @@ class SpotData:
             [
                 [float(val) for val in coordinate.split("_")]
                 for coordinate in self.coordinates_orig
+                if len(coordinate.split("_")) == 2
             ]
         )
-        if self.coordinates.shape[1] != 2:
+        if len(self.coordinates) != len(self.coordinates_orig):
             msg = "Unable not find x and y coordinates. Ensure the naming pattern is 'x_y'."
-            ValueError(msg)
+            raise ValueError(msg)
         if len(self.genes) != self.spot_counts.shape[1]:
-            msg = "Number of genes do not match"
-            ValueError(msg)
-        if (
-            len(self.coordinates_orig) != len(self.coordinates)
-            or len(self.coordinates_orig) != self.spot_counts.shape[0]
-        ):
-            msg = "Number of coordinates do not match"
-            ValueError()
+            msg = "Number of genes do not match."
+            raise ValueError(msg)
+        if len(self.coordinates_orig) != self.spot_counts.shape[0]:
+            msg = "Number of coordinates do not match."
+            raise ValueError(msg)
 
         self.total_counts = np.sum(self.spot_counts, axis=1)
 
-        logging.info("Start with %d spots", len(self.coordinates_orig))
+        logger.info("Start with %d spots", len(self.coordinates_orig))
         indices = np.asarray(
             [
                 not (
@@ -198,7 +198,7 @@ class SpotData:
             ]
         )
         if sum(~indices) > 0:
-            logging.info("Discard %d spots due to annotation issues", sum(~indices))
+            logger.info("Discard %d spots due to annotation issues.", sum(~indices))
         self.coordinates_orig = self.coordinates_orig[indices]
         self.annotations_df = self.annotations_df[self.coordinates_orig]
         self.coordinates = self.coordinates[indices, :]
@@ -232,7 +232,7 @@ def read_count_files(count_files: list[str], min_detection_rate: float) -> pd.Da
     Returns:
         Dataframe containing counts.
     """
-    logging.info("Reading %d count files", len(count_files))
+    logger.info("Reading %d count files", len(count_files))
     counts_dfs = [
         pd.read_table(filename, header=0, index_col=0) for filename in count_files
     ]
@@ -244,19 +244,19 @@ def read_count_files(count_files: list[str], min_detection_rate: float) -> pd.Da
         count_df.index.name = "gene"
 
     counts_df = pd.concat(counts_dfs, copy=False, axis=1, sort=True)
-    logging.info("We have detected unique %d genes", counts_df.shape[0])
+    logger.info("We have detected unique %d genes", counts_df.shape[0])
     counts_df = counts_df.fillna(0).astype(int)
 
     counts_df = counts_df[
         ((counts_df > 0).sum(axis=1) / counts_df.shape[1]) >= min_detection_rate
     ]
-    logging.info(
+    logger.info(
         ("We have unique %d genes with sufficient detection rate (>= %f)"),
         counts_df.shape[0],
         min_detection_rate,
     )
 
-    logging.info(
+    logger.info(
         "The median sequencing depth across the spots is %d",
         np.median(counts_df.sum(0)),
     )
@@ -272,7 +272,7 @@ def read_annotation_files(annotation_files: list[str]) -> pd.DataFrame:
     Returns:
         Dataframe containing annotations.
     """
-    logging.info("Reading %d annotation files", len(annotation_files))
+    logger.info("Reading %d annotation files", len(annotation_files))
     annotation_dfs = [
         pd.read_table(filename, header=0, index_col=0) for filename in annotation_files
     ]
@@ -402,7 +402,7 @@ def process_input_data(
     tissue_section_idx = 0
 
     for count_file in counts_df.columns.unique(level="file"):
-        logging.info("Processing %s", count_file)
+        logger.info("Processing %s", count_file)
 
         coordinates_orig = np.asarray(list(counts_df[count_file].columns))
         spot_counts = counts_df[count_file].values.T
@@ -429,29 +429,29 @@ def process_input_data(
             array_annotations_df,
         )
 
-        indices = count_file_spot_data.total_counts > min_total_count
+        indices = count_file_spot_data.total_counts >= min_total_count
         if np.sum(~indices) > 0:
-            logging.warning(
+            logger.warning(
                 "Discarding %d spots due to low sequencing depth.",
                 np.sum(~indices),
             )
         count_file_spot_data = count_file_spot_data.select(indices)
 
         if sum(indices) < min_num_spots_per_slide:
-            logging.warning(
+            logger.warning(
                 "%s has less than %d valid spots. Maybe coordinates do not match in the count and annotation files.",
                 count_file,
                 sum(indices),
             )
 
-        logging.info("Detecting distinct tissue sections on the slide")
+        logger.info("Detecting distinct tissue sections on the slide")
         tissue_sections = detect_tissue_sections(
             count_file_spot_data.coordinates,
             num_of_neighbors,
         )
 
         if separate_overlapping_tissue_sections:
-            logging.info("Separating tissue sections on the slide")
+            logger.info("Separating tissue sections on the slide")
             tissue_sections = separate_tissue_sections(
                 count_file_spot_data.coordinates,
                 tissue_sections,
@@ -474,8 +474,8 @@ def process_input_data(
             tissue_section_indices = tissue_section_labels == tissue_section_label
 
             # discard those tissue sections that are unexpectedly small
-            if sum(tissue_section_indices) <= min_num_spots_per_tissue_section:
-                logging.warning(
+            if sum(tissue_section_indices) < min_num_spots_per_tissue_section:
+                logger.warning(
                     "Discarding a tissue section with %d spots",
                     sum(tissue_section_indices),
                 )
@@ -622,13 +622,22 @@ def get_spot_adjacency_matrix(
 ) -> np.ndarray:
     """Get spot adjacency matrix.
 
+    num_of_neighbors has to be between 1 and number of coordinates - 2.
+
     Args:
         coordinates: TBA.
         num_of_neighbors: TBA.
 
     Returns:
         TBA.
+
+    Raises:
+        ValueError if num_of_neighbors is outside of the reasonable range.
     """
+    if num_of_neighbors < 1 or num_of_neighbors + 1 >= len(coordinates):
+        msg = "num_of_neighbors has to be between 1 and len(coordinates) - 2."
+        raise ValueError(msg)
+
     coordinates_distance_matrix = distance_matrix(coordinates, coordinates)
     threshold = np.min(
         np.sort(coordinates_distance_matrix, axis=0)[num_of_neighbors + 1, :]
@@ -658,7 +667,7 @@ def detect_tissue_sections(
         nx.algorithms.components.connected.connected_components(spot_graph)
     )
 
-    logging.info("Found %d candidate tissue sections", len(tissue_sections))
+    logger.info("Found %d candidate tissue sections", len(tissue_sections))
 
     return tissue_sections
 
@@ -699,7 +708,7 @@ def separate_tissue_sections(
             [],
         )
 
-    logging.info(
+    logger.info(
         "We have %d candidate tissue sections after the tissue section separation step",
         len(tissue_sections),
     )
@@ -722,7 +731,7 @@ def separate_tissue_section(
     Returns:
         TBA.
     """
-    logging.warning(
+    logger.warning(
         "Tissue section has %d spots. Let us try to break the tissue section into two.",
         len(tissue_section),
     )

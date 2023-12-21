@@ -50,7 +50,7 @@ The count files have the following tab-separated values (TSV) file format
 | ⋮             | ⋮          | ⋮          | ⋮         | ⋱   | ⋮           |
 | Zzz3          | 0          | 1          | 0         | …   | 0           |
 
-The rows and columns have gene identifiers and ST spot coordinates, respectively.
+The rows and columns have gene identifiers and ST spot coordinates (X and Y coordinates are separated by an underscore), respectively.
 
 ### Annotation of ST spots
 
@@ -74,7 +74,7 @@ The annotation files have the following TSV file format
 | Cent_Can       | 0          | 0          | 0         | …   | 0           |
 | Lat_Edge       | 0          | 0          | 0         | …   | 0           |
 
-The rows and columns correspond to the user-define anatomical annotation regions (AAR) and ST spot coordinates, respectively. For instance, the spot 32.06_2.04 has the Vent_Horn annotation (i.e. located in ventral horn). The annotation category of each ST spot is **one-hot encoded** and we do not currently support more than one annotation category per ST spot.
+The rows and columns correspond to the user-define anatomical annotation regions (AAR) and ST spot coordinates (X and Y coordinates are separated by an underscore), respectively. For instance, the spot 32.06_2.04 has the Vent_Horn annotation (i.e. located in ventral horn). The annotation category of each ST spot is **one-hot encoded** and we do not currently support more than one annotation category per ST spot.
 
 ST spots without annotation categories are discarded in the analysis. This behaviour can be useful when you want to discard some ST spots from the analysis based on the tissue histology.
 
