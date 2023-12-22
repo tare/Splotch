@@ -256,7 +256,7 @@ def run_svi(
     num_samples: int = 1_000,
     use_zero_inflated: bool = False,
 ) -> SplotchResult:
-    """Run NUTS.
+    """Run SVI.
 
     Args:
         key: PRNGKey.
