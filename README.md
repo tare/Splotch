@@ -118,6 +118,18 @@ In the `tutorials` directory, we have two example ST data sets
 
 Please see the [ALS](tutorials/als_st/Tutorial.ipynb) and [Olfactory Bulb](tutorials/olfactory_bulb_st/Tutorial.ipynb) tutorials.
 
+In the simplest setting, the following lines would be enough to run Splotch on a single gene
+
+```python
+# read input data
+splotch_input_data = get_input_data("metadata.tsv")
+
+# run Splotch on the Gfap gene
+key = random.PRNGKey(0)
+key, key_ = random.split(key)
+splotch_result_nuts = run_nuts(key_, ["Gfap"], splotch_input_data)
+```
+
 ### References
 
 [1] Ståhl, Patrik L., et al. ["Visualization and analysis of gene expression in tissue sections by spatial transcriptomics."](https://science.sciencemag.org/content/353/6294/78) _Science_ 353.6294 (2016): 78-82.
