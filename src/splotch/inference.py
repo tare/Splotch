@@ -16,8 +16,9 @@ from numpyro.infer.util import initialize_model
 from numpyro.optim import Adam, _NumPyroOptim
 from numpyro.util import fori_collect
 
+from splotch.dataclasses import SplotchInputData, SplotchResult
 from splotch.models import splotch_v1
-from splotch.utils import SplotchInputData, SplotchResult, get_mcmc_summary
+from splotch.utils import get_mcmc_summary
 
 KeyArray = Array
 

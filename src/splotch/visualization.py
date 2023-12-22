@@ -6,7 +6,9 @@ import numpy as np
 from matplotlib.figure import Figure
 from PIL import Image
 
-from splotch.utils import SplotchInputData, SplotchResult
+from splotch.dataclasses import SplotchInputData, SplotchResult
+
+# ruff: noqa: PLR0914
 
 
 def plot_coefficients(
@@ -369,6 +371,85 @@ def plot_annotations_on_slides(splotch_input_data: SplotchInputData) -> Figure:
 
         if ax_idx == 1:
             ax.legend()
+
+    fig.tight_layout()
+
+    return fig
+
+
+def plot_tissue_sections_on_slides(splotch_input_data: SplotchInputData) -> Figure:
+    """Plot detected tissue sections on slides.
+
+    Args:
+        splotch_input_data: TBA.
+
+    Returns:
+        Matplotlib figure object.
+    """
+    count_files = splotch_input_data.metadata.index.get_level_values(
+        "count_file"
+    ).unique()
+
+    num_cols = 5
+    num_rows = ceil(len(count_files) / num_cols)
+
+    fig = plt.figure()
+    fig.set_size_inches(3 * num_cols, 3 * num_rows)
+
+    for ax_idx, count_file in enumerate(count_files, start=1):
+        ax = fig.add_subplot(num_rows, num_cols, ax_idx)
+
+        tissue_image = Image.open(
+            splotch_input_data.metadata.query(
+                "count_file == @count_file"
+            ).image_file.iloc[0]
+        )
+
+        xdim, ydim = tissue_image.size
+
+        # downsample the image
+        tissue_image = tissue_image.resize(
+            (np.round(xdim * 0.05).astype(int), np.round(ydim * 0.05).astype(int))
+        )
+
+        xdim, ydim = tissue_image.size
+        pixel_dim = 194.0 / (6200.0 / xdim)
+
+        x = pixel_dim * (
+            splotch_input_data.metadata.query("count_file == @count_file").x - 1
+        )
+        y = pixel_dim * (
+            splotch_input_data.metadata.query("count_file == @count_file").y - 1
+        )
+        count_file_tissue_sections = splotch_input_data.metadata[
+            splotch_input_data.metadata.index.get_level_values("count_file")
+            == count_file
+        ].index.get_level_values("tissue_section")
+
+        ax.imshow(tissue_image, origin="upper", interpolation="none", alpha=0.6)
+
+        for tissue_section_idx, tissue_section in enumerate(
+            count_file_tissue_sections.unique(), start=1
+        ):
+            ax.scatter(
+                x[count_file_tissue_sections == tissue_section],
+                y[count_file_tissue_sections == tissue_section],
+                s=5,
+                alpha=0.8,
+                label=f"Tissue section #{tissue_section_idx}",
+            )
+
+        ax.set_aspect("equal")
+
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+        ax.set_title(
+            f"{count_file}\n"
+            f"{splotch_input_data.metadata.query('count_file == @count_file').level_1.iloc[0]}"
+        )
+
+        ax.legend()
 
     fig.tight_layout()
 

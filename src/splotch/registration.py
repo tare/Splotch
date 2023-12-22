@@ -9,7 +9,9 @@ import pandas as pd
 from jax import Array, grad, jit, random
 from jax.example_libraries.optimizers import OptimizerState, adagrad
 
-from splotch.utils import SplotchInputData
+from splotch.dataclasses import SplotchInputData
+
+logger = logging.getLogger(__name__)
 
 KeyArray = Array
 
@@ -59,12 +61,11 @@ def register(
     # move to origin
     coordinates = [x - np.mean(x, axis=0, keepdims=True) for x in coordinates]
 
-    logging.info("Start the tissue section registration")
+    logger.info("Start the tissue section registration")
     coordinates_registered = register_tissue_sections(
         key, coordinates, annotations, num_steps, aars
     )
 
-    logging.info("Register the consensus spot cloud")
     coordinates_registered = register_consensus(
         coordinates_registered,
         annotations,
@@ -150,23 +151,23 @@ def register_tissue_sections(
         )
     )
     prev_value = loss(params)
-    logging.info("Iteration 0: loss = %f", prev_value)
+    logger.info("Iteration 0: loss = %f", prev_value)
     opt_state = opt_init(params)
     for i in range(num_steps):
         opt_state = step(i, opt_state)
         if i > 0 and i % 100 == 0:
             params = get_params(opt_state)
             curr_value = loss(params)
-            logging.info("Iteration %d: loss = %f", i + 1, curr_value)
+            logger.info("Iteration %d: loss = %f", i + 1, curr_value)
 
             if jnp.isclose(prev_value, curr_value):
-                logging.info("Converged after %d iterations", i + 1)
+                logger.info("Converged after %d iterations", i + 1)
                 params = get_params(opt_state)
                 return np.asarray(transform(params, x))
 
             prev_value = curr_value
 
-    logging.warning("Not converged after %d iterations", i + 1)
+    logger.warning("Not converged after %d iterations", i + 1)
     params = get_params(opt_state)
     return np.asarray(transform(params, x))
 
