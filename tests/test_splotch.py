@@ -6,9 +6,10 @@ import numpy as np
 import pandas as pd
 import pytest
 import scipy.stats
+from jax import random
+from splotch.dataclasses import SplotchInputData, SpotData
+from splotch.registration import register
 from splotch.utils import (
-    SplotchInputData,
-    SpotData,
     detect_tissue_sections,
     get_mcmc_summary,
     get_spot_adjacency_matrix,
@@ -418,7 +419,7 @@ def splotchinputdata() -> (
         num_levels=1,
         min_total_count=1,
         min_num_spots_per_slide=1,
-        num_of_neighbors=2,
+        num_of_neighbors=1,
         separate_overlapping_tissue_sections=False,
         min_num_spots_per_tissue_section=1,
     )
@@ -787,7 +788,7 @@ def test_get_spot_adjacency_matrix_invalid(
 def test_splotchinputdata(
     splotchinputdata: tuple[SplotchInputData, pd.DataFrame, pd.DataFrame, pd.DataFrame],
 ) -> None:
-    """Test SplotchInpuData."""
+    """Test SplotchInputData."""
     splotch_input_data, metadata_df, counts_df, annotations_df = splotchinputdata
 
     assert splotch_input_data.num_levels() == 1
