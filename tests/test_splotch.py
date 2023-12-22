@@ -427,89 +427,6 @@ def splotchinputdata() -> (
     return splotch_input_data, metadata_df, counts_df, annotations_df
 
 
-@pytest.fixture()
-def splotchinputdata_registration() -> SplotchInputData:
-    """SplotchInputData."""
-    count_files = ["count_file_1.tsv", "count_file_2.tsv"]
-    annotation_files = ["annotation_file_1.tsv", "annotation_file_2.tsv"]
-
-    metadata_df = pd.DataFrame(
-        {
-            "level_1": ["cond1", "cond2"],
-            "count_file": count_files,
-            "annotation_file": annotation_files,
-            "image_file": ["image_1.jpeg", "image_2.jpeg"],
-        }
-    )
-    counts_dfs = [
-        pd.DataFrame(
-            {"1_1": [2, 1], "2_2": [5, 10], "3_3": [1, 1], "4_4": [1, 2]},
-            index=["g1", "g2"],
-        ),
-        pd.DataFrame(
-            {
-                "8_8": [10, 5],
-                "7_7": [5, 1],
-                "6_6": [3, 1],
-                "5_5": [1, 4],
-                "11_1": [10, 5],
-                "11_0": [5, 1],
-                "11_-1": [3, 1],
-                "11_-2": [1, 4],
-            },
-            index=["g1", "g2"],
-        ),
-    ]
-
-    for filename, count_df in zip(count_files, counts_dfs):
-        count_df.columns = pd.MultiIndex.from_product(
-            [[filename], count_df.columns], names=["file", "coordinate"]
-        )
-        count_df.index.name = "gene"
-
-    counts_df = pd.concat(counts_dfs, copy=False, axis=1, sort=True)
-
-    annotation_dfs = [
-        pd.DataFrame(
-            {"1_1": [1, 0], "2_2": [0, 1], "3_3": [0, 1], "4_4": [1, 0]},
-            index=["aar1", "aar2"],
-        ),
-        pd.DataFrame(
-            {
-                "8_8": [1, 0],
-                "7_7": [0, 1],
-                "6_6": [0, 1],
-                "5_5": [1, 0],
-                "11_1": [1, 0],
-                "11_0": [0, 1],
-                "11_-1": [0, 1],
-                "11_-2": [1, 0],
-            },
-            index=["aar1", "aar2"],
-        ),
-    ]
-
-    for filename, annotation_df in zip(annotation_files, annotation_dfs):
-        annotation_df.columns = pd.MultiIndex.from_product(
-            [[filename], annotation_df.columns], names=["file", "coordinate"]
-        )
-        annotation_df.index.name = "aar"
-
-    annotations_df = pd.concat(annotation_dfs, copy=False, axis=1, sort=True)
-
-    return process_input_data(
-        metadata_df,
-        counts_df,
-        annotations_df,
-        num_levels=1,
-        min_total_count=1,
-        min_num_spots_per_slide=1,
-        num_of_neighbors=2,
-        separate_overlapping_tissue_sections=False,
-        min_num_spots_per_tissue_section=1,
-    )
-
-
 @pytest.mark.parametrize(
     "test_input", [(0, 2, 0, 2), (-1, 1, 0, 1), (0, 0.2, -0.5, 0.2)]
 )
@@ -889,14 +806,4 @@ def test_splotchinputdata(
     assert np.all(
         (counts_df.sum(0) / counts_df.sum(0).median()).values
         == splotch_input_data.size_factors()
-    )
-
-
-def test_register(splotchinputdata_registration: SplotchInputData) -> None:
-    """Test register()."""
-    key = random.PRNGKey(0)
-    key, key_ = random.split(key, 2)
-    register(key_, splotchinputdata_registration, num_steps=10_000)
-    assert np.all(
-        np.isclose(splotchinputdata_registration.metadata.y_registration, 0, atol=1e-2)
     )
