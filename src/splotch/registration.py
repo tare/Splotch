@@ -9,7 +9,7 @@ import pandas as pd
 from jax import Array, grad, jit, random
 from jax.example_libraries.optimizers import OptimizerState, adagrad
 
-from splotch.utils import SplotchInputData
+from splotch.dataclasses import SplotchInputData
 
 logger = logging.getLogger(__name__)
 

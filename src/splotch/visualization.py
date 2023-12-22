@@ -6,7 +6,9 @@ import numpy as np
 from matplotlib.figure import Figure
 from PIL import Image
 
-from splotch.utils import SplotchInputData, SplotchResult
+from splotch.dataclasses import SplotchInputData, SplotchResult
+
+# ruff: noqa: PLR0914
 
 
 def plot_coefficients(

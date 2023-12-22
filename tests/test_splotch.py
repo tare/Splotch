@@ -787,7 +787,7 @@ def test_get_spot_adjacency_matrix_invalid(
 def test_splotchinputdata(
     splotchinputdata: tuple[SplotchInputData, pd.DataFrame, pd.DataFrame, pd.DataFrame],
 ) -> None:
-    """Test SplotchInpuData."""
+    """Test SplotchInputData."""
     splotch_input_data, metadata_df, counts_df, annotations_df = splotchinputdata
 
     assert splotch_input_data.num_levels() == 1
