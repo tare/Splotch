@@ -1,5 +1,6 @@
 """visualization.py."""
 from math import ceil
+from typing import Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,6 +10,118 @@ from PIL import Image
 from splotch.dataclasses import SplotchInputData, SplotchResult
 
 # ruff: noqa: PLR0914
+
+LOAD_SLIDE_IMAGE_CALLABLE = Callable[
+    [SplotchInputData | SplotchResult, str], Image.Image
+]
+CALCULATE_SLIDE_COORDINATES_CALLABLE = (
+    Callable[
+        [SplotchInputData | SplotchResult, Image.Image, str],
+        tuple[np.ndarray, np.ndarray],
+    ],
+)
+LOAD_SLIDE_COORDINATES_AND_IMAGE_CALLABLE = Callable[
+    [
+        SplotchInputData | SplotchResult,
+        str,
+        float,
+        LOAD_SLIDE_IMAGE_CALLABLE,
+        CALCULATE_SLIDE_COORDINATES_CALLABLE,
+    ],
+    tuple[np.ndarray, np.ndarray, Image.Image],
+]
+
+
+def load_slide_image(
+    splotch_data: SplotchInputData | SplotchResult, count_file: str
+) -> Image.Image:
+    """Load slide image.
+
+    Args:
+        splotch_data: Splotch data.
+        count_file: Count file of interest.
+
+    Returns:
+        Image.
+    """
+    if "count_file" in splotch_data.metadata:
+        return Image.open(
+            splotch_data.metadata.query("count_file == @count_file").image_file.iloc[0]
+        )
+    return Image.open(
+        splotch_data.metadata[
+            splotch_data.metadata.index.get_level_values("count_file") == count_file
+        ].image_file.iloc[0]
+    )
+
+
+def calculate_st_slide_coordinates(
+    splotch_data: SplotchInputData | SplotchResult,
+    slide_image: Image.Image,
+    count_file: str,  # noqa: ARG001
+) -> tuple[np.ndarray, np.ndarray]:
+    """Calculate ST slide coordinates corresponding to image.
+
+    Tested only using the old ST slides.
+
+    Args:
+        splotch_data: Splotch data.
+        slide_image: Slide image.
+        count_file: Count file of interest.
+
+    Returns:
+        X coordinates of the spots and and y coordinates of the spots.
+    """
+    xdim, _ = slide_image.size
+    pixel_dim = 194.0 / (6200.0 / xdim)
+
+    x = pixel_dim * (splotch_data.metadata.query("count_file == @count_file").x - 1)
+    y = pixel_dim * (splotch_data.metadata.query("count_file == @count_file").y - 1)
+
+    return x, y
+
+
+def load_slide_coordinates_and_image(
+    splotch_data: SplotchInputData | SplotchResult,
+    count_file: str,
+    scale_factor: float = 0.05,
+    load_slide_image: Callable[
+        [SplotchInputData | SplotchResult, str], Image.Image
+    ] = load_slide_image,
+    calculate_slide_coordinates: Callable[
+        [SplotchInputData | SplotchResult, Image.Image, str],
+        tuple[np.ndarray, np.ndarray],
+    ] = calculate_st_slide_coordinates,
+) -> tuple[np.ndarray, np.ndarray, Image.Image]:
+    """Get slide image and corresponding spot coordinates.
+
+    Args:
+        splotch_data: Splotch data.
+        count_file: Count file of interest.
+        scale_factor: Factor to scale the HE image. Defaults to 0.05.
+        load_slide_image: Function to load slide image.
+            Defaults to splotch.visualization.load_slide_image().
+        calculate_slide_coordinates: Function to calculate coordinates on the image.
+            Defaults to splotch.visualization.calculate_st_slide_coordinates().
+
+    Returns:
+        X coordinates of the spots, y coordinates of the spots, and the image.
+    """
+    slide_image = load_slide_image(splotch_data, count_file)
+
+    xdim, ydim = slide_image.size
+
+    # downsample the image
+    slide_image = slide_image.resize(
+        (
+            np.round(xdim * scale_factor).astype(int),
+            np.round(ydim * scale_factor).astype(int),
+        )
+    )
+
+    x, y = calculate_slide_coordinates(splotch_data, slide_image, count_file)
+
+    return x, y, slide_image
 
 
 def plot_coefficients(
@@ -53,12 +166,18 @@ def plot_coefficients(
     return fig
 
 
-def plot_rates_on_slides(splotch_result: SplotchResult, gene: str) -> Figure:
+def plot_rates_on_slides(
+    splotch_result: SplotchResult,
+    gene: str,
+    load_slide_coordinates_and_image: LOAD_SLIDE_COORDINATES_AND_IMAGE_CALLABLE = load_slide_coordinates_and_image,
+) -> Figure:
     """Plot rate estimates on slides.
 
     Args:
         splotch_result: Splotch result data.
         gene: Gene of interest.
+        load_slide_coordinates_and_image: Function to load slide images.
+            Defaults to splotch.visualization.load_slide_coordinates_and_image().
 
     Returns:
         Matplotlib figure object.
@@ -77,31 +196,17 @@ def plot_rates_on_slides(splotch_result: SplotchResult, gene: str) -> Figure:
     for ax_idx, count_file in enumerate(count_files, start=1):
         ax = fig.add_subplot(num_rows, num_cols, ax_idx)
 
-        tissue_image = Image.open(
-            splotch_result.metadata.query("count_file == @count_file").image_file.iloc[
-                0
-            ]
-        )
+        if "image_file" in splotch_result.metadata:
+            x, y, tissue_image = load_slide_coordinates_and_image(
+                splotch_result, count_file
+            )
 
-        xdim, ydim = tissue_image.size
+            ax.imshow(tissue_image, origin="upper", interpolation="none", alpha=0.6)
+        else:
+            x = splotch_result.metadata.query("count_file == @count_file").x
+            y = splotch_result.metadata.query("count_file == @count_file").y
 
-        # downsample the image
-        tissue_image = tissue_image.resize(
-            (np.round(xdim * 0.05).astype(int), np.round(ydim * 0.05).astype(int))
-        )
-
-        xdim, ydim = tissue_image.size
-        pixel_dim = 194.0 / (6200.0 / xdim)
-
-        x = pixel_dim * (
-            splotch_result.metadata.query("count_file == @count_file").x - 1
-        )
-        y = pixel_dim * (
-            splotch_result.metadata.query("count_file == @count_file").y - 1
-        )
         c = rates_s[count_file]
-
-        ax.imshow(tissue_image, origin="upper", interpolation="none", alpha=0.6)
 
         cb = ax.scatter(
             x, y, s=4, c=c, cmap="viridis", vmin=vmin, vmax=vmax, marker="o", alpha=0.9
@@ -126,7 +231,10 @@ def plot_rates_on_slides(splotch_result: SplotchResult, gene: str) -> Figure:
 
 
 def plot_variable_on_slides(
-    splotch_result: SplotchResult, gene: str, variable: str = "f"
+    splotch_result: SplotchResult,
+    gene: str,
+    variable: str = "f",
+    load_slide_coordinates_and_image: LOAD_SLIDE_COORDINATES_AND_IMAGE_CALLABLE = load_slide_coordinates_and_image,
 ) -> Figure:
     """Plot variable of interest on slides.
 
@@ -136,6 +244,8 @@ def plot_variable_on_slides(
         splotch_result: Splotch result data.
         gene: Gene of interest.
         variable: Variable of interest. Defaults to `f`.
+        load_slide_coordinates_and_image: Function to load slide images.
+            Defaults to splotch.visualization.load_slide_coordinates_and_image().
 
     Returns:
         Matplotlib figure object.
@@ -157,33 +267,19 @@ def plot_variable_on_slides(
     for ax_idx, count_file in enumerate(count_files, start=1):
         ax = fig.add_subplot(num_rows, num_cols, ax_idx)
 
-        tissue_image = Image.open(
-            splotch_result.metadata.query("count_file == @count_file").image_file.iloc[
-                0
-            ]
-        )
+        if "image_file" in splotch_result.metadata:
+            x, y, tissue_image = load_slide_coordinates_and_image(
+                splotch_result, count_file
+            )
 
-        xdim, ydim = tissue_image.size
+            ax.imshow(tissue_image, origin="upper", interpolation="none", alpha=0.6)
+        else:
+            x = splotch_result.metadata.query("count_file == @count_file").x
+            y = splotch_result.metadata.query("count_file == @count_file").y
 
-        # downsample the image
-        tissue_image = tissue_image.resize(
-            (np.round(xdim * 0.05).astype(int), np.round(ydim * 0.05).astype(int))
-        )
-
-        xdim, ydim = tissue_image.size
-        pixel_dim = 194.0 / (6200.0 / xdim)
-
-        x = pixel_dim * (
-            splotch_result.metadata.query("count_file == @count_file").x - 1
-        )
-        y = pixel_dim * (
-            splotch_result.metadata.query("count_file == @count_file").y - 1
-        )
         c = data[
             splotch_result.metadata.index.get_level_values("count_file") == count_file
         ]
-
-        ax.imshow(tissue_image, origin="upper", interpolation="none", alpha=0.6)
 
         cb = ax.scatter(
             x, y, s=4, c=c, cmap="RdBu_r", vmin=vmin, vmax=vmax, marker="o", alpha=0.9
@@ -301,11 +397,16 @@ def plot_annotations_in_common_coordinate_system(
     return fig
 
 
-def plot_annotations_on_slides(splotch_input_data: SplotchInputData) -> Figure:
+def plot_annotations_on_slides(
+    splotch_input_data: SplotchInputData,
+    load_slide_coordinates_and_image: LOAD_SLIDE_COORDINATES_AND_IMAGE_CALLABLE = load_slide_coordinates_and_image,
+) -> Figure:
     """Plot annotations on slides.
 
     Args:
         splotch_input_data: Splotch input data.
+        load_slide_coordinates_and_image: Function to load slide images.
+            Defaults to splotch.visualization.load_slide_coordinates_and_image().
 
     Returns:
         Matplotlib figure object.
@@ -325,34 +426,20 @@ def plot_annotations_on_slides(splotch_input_data: SplotchInputData) -> Figure:
     for ax_idx, count_file in enumerate(count_files, start=1):
         ax = fig.add_subplot(num_rows, num_cols, ax_idx)
 
-        tissue_image = Image.open(
-            splotch_input_data.metadata.query(
-                "count_file == @count_file"
-            ).image_file.iloc[0]
-        )
+        if "image_file" in splotch_input_data.metadata:
+            x, y, tissue_image = load_slide_coordinates_and_image(
+                splotch_input_data, count_file
+            )
 
-        xdim, ydim = tissue_image.size
+            ax.imshow(tissue_image, origin="upper", interpolation="none", alpha=0.6)
+        else:
+            x = splotch_input_data.metadata.query("count_file == @count_file").x
+            y = splotch_input_data.metadata.query("count_file == @count_file").y
 
-        # downsample the image
-        tissue_image = tissue_image.resize(
-            (np.round(xdim * 0.05).astype(int), np.round(ydim * 0.05).astype(int))
-        )
-
-        xdim, ydim = tissue_image.size
-        pixel_dim = 194.0 / (6200.0 / xdim)
-
-        x = pixel_dim * (
-            splotch_input_data.metadata.query("count_file == @count_file").x - 1
-        )
-        y = pixel_dim * (
-            splotch_input_data.metadata.query("count_file == @count_file").y - 1
-        )
         count_file_annotations = splotch_input_data.metadata.aar[
             splotch_input_data.metadata.index.get_level_values("count_file")
             == count_file
         ]
-
-        ax.imshow(tissue_image, origin="upper", interpolation="none", alpha=0.6)
 
         for aar in aars:
             ax.scatter(
@@ -381,11 +468,16 @@ def plot_annotations_on_slides(splotch_input_data: SplotchInputData) -> Figure:
     return fig
 
 
-def plot_tissue_sections_on_slides(splotch_input_data: SplotchInputData) -> Figure:
+def plot_tissue_sections_on_slides(
+    splotch_input_data: SplotchInputData,
+    load_slide_coordinates_and_image: LOAD_SLIDE_COORDINATES_AND_IMAGE_CALLABLE = load_slide_coordinates_and_image,
+) -> Figure:
     """Plot detected tissue sections on slides.
 
     Args:
         splotch_input_data: Splotch input data.
+        load_slide_coordinates_and_image: Function to load slide images.
+            Defaults to splotch.visualization.load_slide_coordinates_and_image().
 
     Returns:
         Matplotlib figure object.
@@ -403,34 +495,20 @@ def plot_tissue_sections_on_slides(splotch_input_data: SplotchInputData) -> Figu
     for ax_idx, count_file in enumerate(count_files, start=1):
         ax = fig.add_subplot(num_rows, num_cols, ax_idx)
 
-        tissue_image = Image.open(
-            splotch_input_data.metadata.query(
-                "count_file == @count_file"
-            ).image_file.iloc[0]
-        )
+        if "image_file" in splotch_input_data.metadata:
+            x, y, tissue_image = load_slide_coordinates_and_image(
+                splotch_input_data, count_file
+            )
 
-        xdim, ydim = tissue_image.size
+            ax.imshow(tissue_image, origin="upper", interpolation="none", alpha=0.6)
+        else:
+            x = splotch_input_data.metadata.query("count_file == @count_file").x
+            y = splotch_input_data.metadata.query("count_file == @count_file").y
 
-        # downsample the image
-        tissue_image = tissue_image.resize(
-            (np.round(xdim * 0.05).astype(int), np.round(ydim * 0.05).astype(int))
-        )
-
-        xdim, ydim = tissue_image.size
-        pixel_dim = 194.0 / (6200.0 / xdim)
-
-        x = pixel_dim * (
-            splotch_input_data.metadata.query("count_file == @count_file").x - 1
-        )
-        y = pixel_dim * (
-            splotch_input_data.metadata.query("count_file == @count_file").y - 1
-        )
         count_file_tissue_sections = splotch_input_data.metadata[
             splotch_input_data.metadata.index.get_level_values("count_file")
             == count_file
         ].index.get_level_values("tissue_section")
-
-        ax.imshow(tissue_image, origin="upper", interpolation="none", alpha=0.6)
 
         for tissue_section_idx, tissue_section in enumerate(
             count_file_tissue_sections.unique(), start=1
