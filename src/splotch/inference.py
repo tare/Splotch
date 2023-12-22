@@ -4,6 +4,7 @@ from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
+import numpyro.distributions as dist
 import pandas as pd
 from jax import Array, jit, pmap, random, vmap
 from jax.lax import scan
@@ -17,10 +18,12 @@ from numpyro.optim import Adam, _NumPyroOptim
 from numpyro.util import fori_collect
 
 from splotch.dataclasses import SplotchInputData, SplotchResult
-from splotch.models import splotch_v1
+from splotch.models import get_default_priors, splotch_v1
 from splotch.utils import get_mcmc_summary
 
 KeyArray = Array
+
+# ruff: noqa: PLR0913, PLR0917
 
 
 def get_padded_coordinates(
@@ -77,12 +80,15 @@ def get_padded_coordinates(
 
 
 def get_splotch_kwargs(
-    splotch_input_data: SplotchInputData, use_zero_inflated: bool
+    splotch_input_data: SplotchInputData,
+    priors: dict[str, dist.Distribution],
+    use_zero_inflated: bool,
 ) -> dict[str, int | np.ndarray | bool | dict[str, int]]:
     """Return.
 
     Args:
         splotch_input_data: Splotch input data.
+        priors: Prior distributions.
         use_zero_inflated: Whether to use the zero-inflated Poisson likelihood.
 
     Returns:
@@ -107,6 +113,7 @@ def get_splotch_kwargs(
         "valid_coordinates": valid_coordinates,
         "levels": levels,
         "size_factors": size_factors,
+        "priors": priors,
         "use_zero_inflated": use_zero_inflated,
     }
 
@@ -119,6 +126,7 @@ def run_nuts(
     num_warmup: int = 1_000,
     num_samples: int = 1_000,
     num_chains: int = 4,
+    priors: dict[str, dist.Distribution] | None = None,
     use_zero_inflated: bool = False,
 ) -> SplotchResult:
     """Run NUTS.
@@ -131,13 +139,16 @@ def run_nuts(
         num_warmup: Number of warmup iterations.
         num_samples: Number of sampling iterations.
         num_chains: Number of chains.
+        priors: Prior distributions. Defaults to `splotch.models.get_default_priors()`.
         use_zero_inflated: Whether to use the zero-inflated Poisson likelihood. Defaults to False.
     """
 
     def get_model_kwargs(model_kwargs: dict[str, Any], counts: Array) -> dict[str, Any]:
         return model_kwargs | {"counts": counts}
 
-    model_kwargs = get_splotch_kwargs(splotch_input_data, use_zero_inflated)
+    priors = get_default_priors() | (priors if priors is not None else {})
+
+    model_kwargs = get_splotch_kwargs(splotch_input_data, priors, use_zero_inflated)
 
     counts = jnp.asarray(splotch_input_data.counts(genes))
 
@@ -254,6 +265,7 @@ def run_svi(
     loss: ELBO | None = None,
     num_steps: int = 10_000,
     num_samples: int = 1_000,
+    priors: dict[str, dist.Distribution] | None = None,
     use_zero_inflated: bool = False,
 ) -> SplotchResult:
     """Run SVI.
@@ -263,11 +275,12 @@ def run_svi(
         genes: Genes of interest.
         splotch_input_data: Splotch input data.
         map_method: Map method. Possible values are pmap, vmap, and map. Defaults to map.
-        guide: Automatic guide.
-        optim: Optimizer. Defaults to numpyro.optim.Adam(step.size=0.1).
-        loss: Loss function. Defaults to Trace_ELBO(num_particles=10).
+        guide: Automatic guide. Defaults to `AutoNormal(splotch.models.splotch_v1)`.
+        optim: Optimizer. Defaults to `numpyro.optim.Adam(step.size=0.1)`.
+        loss: Loss function. Defaults to `Trace_ELBO(num_particles=10)`.
         num_steps: Number of optimization steps. Defaults to 10_000.
         num_samples: Number of samples from the guide. Defaults to 1_000.
+        priors: Prior distributions. Defaults to `splotch.models.get_default_priors()`.
         use_zero_inflated: Whether to use the zero-inflated Poisson likelihood. Defaults to False.
 
     Returns:
@@ -277,7 +290,9 @@ def run_svi(
     optim = optim or Adam(step_size=0.1)
     loss = loss or Trace_ELBO(num_particles=10)
 
-    model_kwargs = get_splotch_kwargs(splotch_input_data, use_zero_inflated)
+    priors = get_default_priors() | (priors if priors is not None else {})
+
+    model_kwargs = get_splotch_kwargs(splotch_input_data, priors, use_zero_inflated)
     counts = np.asarray(splotch_input_data.counts(genes))
 
     def run_svi(key: KeyArray, counts: Array) -> tuple[dict[str, Array], Array, Array]:

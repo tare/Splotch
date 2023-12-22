@@ -10,6 +10,26 @@ from jax import Array
 GP_INPUT_DIMENSIONS = 3
 
 
+def get_default_priors() -> dict[str, dist.Distribution]:
+    """Get default priors.
+
+    The default priors are:
+        alpha ~ Gamma(2, 2),
+        length ~ Gamma(10, 10),
+        theta ~ Beta(1, 2),
+        sigma_spot ~ HalfNormal(0.3).
+
+    Returns:
+        Prior distributions.
+    """
+    return {
+        "alpha": dist.Gamma(2, 2),
+        "length": dist.Gamma(10, 10),
+        "theta": dist.Beta(1, 2),
+        "sigma_spot": dist.HalfNormal(0.3),
+    }
+
+
 def gp(x: Array, L: Array, M: list[int], alpha: Array, length: Array) -> Array:
     """Hilbert space approximate Bayesian Gaussian process.
 
@@ -104,7 +124,8 @@ def splotch_v1(
     valid_coordinates: np.ndarray,
     levels: np.ndarray,
     size_factors: np.ndarray,
-    use_zero_inflated: bool = False,
+    use_zero_inflated: bool,
+    priors: dict[str, dist.Distribution],
 ) -> None:
     """Splotch generative model.
 
@@ -119,6 +140,7 @@ def splotch_v1(
         valid_coordinates: Indices of unpadded coordinates for each tissue section.
         levels: Level categories for each spot.
         size_factors: Size factor for each spot.
+        priors: Prior distributions of `alpha`, `length`, `spot_sigma`, and `theta`.
         use_zero_inflated: Whether to use the zero-inflated Poisson likelihood.
     """
     if num_levels not in {1, 2, 3}:
@@ -176,8 +198,8 @@ def splotch_v1(
     num_basis = 5
     L = jnp.asarray([1.5 * jnp.max(padded_coordinates)])
     M = padded_coordinates.shape[-1] * [num_basis]
-    alpha = numpyro.sample("alpha", dist.Gamma(2, 2))
-    length = numpyro.sample("length", dist.Gamma(10, 10))
+    alpha = numpyro.sample("alpha", priors["alpha"])
+    length = numpyro.sample("length", priors["length"])
     with numpyro.plate("tissue_section", padded_coordinates.shape[-3], dim=-2):
         padded_f = numpyro.handlers.scope(gp, "gp")(
             padded_coordinates,
@@ -189,13 +211,10 @@ def splotch_v1(
 
     f = numpyro.deterministic("f", padded_f[valid_coordinates[..., 0]])
 
-    sigma_spot = 0.3
-    sigma_spot_raw = numpyro.sample("sigma_spot", dist.HalfNormal(1))
+    sigma_spot_raw = numpyro.sample("sigma_spot", priors["sigma_spot"])
     with numpyro.plate("spot", num_spots):
         spot_noise_raw = numpyro.sample("spot_noise_raw", dist.Normal(0, 1))
-    spot_noise = numpyro.deterministic(
-        "spot_noise", sigma_spot * sigma_spot_raw * spot_noise_raw
-    )
+    spot_noise = numpyro.deterministic("spot_noise", sigma_spot_raw * spot_noise_raw)
 
     rate = numpyro.deterministic(
         "lambda",
@@ -203,7 +222,7 @@ def splotch_v1(
     )
 
     if use_zero_inflated:
-        theta = numpyro.sample("theta", dist.Beta(1, 2))
+        theta = numpyro.sample("theta", priors["theta"])
         with numpyro.plate("spot", num_spots):
             numpyro.sample(
                 "counts",
