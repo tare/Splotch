@@ -1,0 +1,140 @@
+#!/bin/bash -e
+
+error_exit()
+{
+  echo "$1" 1>&2
+  exit 1
+}
+
+usage() {
+  echo "usage: `basename $0` [-h] -g GENE_IDX -d DATA_DIRECTORY -o OUTPUT_DIRECTORY -b BINARY -n NUM_SAMPLES -c NUM_CHAINS" 1>&2
+}
+long_usage() {
+  cat <<EOF
+usage: `basename $0` [-h] -g GENE_IDX -d DATA_DIRECTORY -o OUTPUT_DIRECTORY
+               -b BINARY -n NUM_SAMPLES -c NUM_CHAINS
+
+A wrapper for running Splotch
+
+optional arguments:
+  -h                    show this help message and exit
+  -g                    gene index
+  -d                    data directory
+  -o                    output directory
+  -b                    Splotch binary
+  -n                    number of samples
+  -c                    number of chains
+EOF
+}
+
+gflag=false
+dflag=false
+oflag=false
+bflag=false
+nflag=false
+cflag=false
+
+while getopts ":g:d:o:b:n:c:h" options; do
+  case "${options}" in 
+    h)
+      long_usage
+      exit 0
+      ;;
+    g)
+      GENE=${OPTARG}
+      gflag=true
+      ;;
+    d)
+      DATA_DIRECTORY=${OPTARG}
+      dflag=true
+      ;;
+    o)
+      OUTPUT_DIRECTORY=${OPTARG}
+      oflag=true
+      ;;
+    b)
+      BINARY=${OPTARG}
+      bflag=true
+      ;;
+    n)
+      NUM_SAMPLES=${OPTARG}
+      nflag=true
+      ;;
+    c)
+      NUM_CHAINS=${OPTARG}
+      cflag=true
+      ;;
+    :)
+      usage
+      echo "`basename $0`: error argument: -${OPTARG}: expected one argument"
+      exit 1
+      ;;
+    #*)
+      #usage
+      #exit 1
+      #;;
+  esac
+done
+
+# check we got all the required arguments
+if ! $gflag
+then
+  usage
+  echo "`basename $0`: error: argument -g is required"
+  exit 1 
+fi
+if ! $dflag
+then
+  usage
+  echo "`basename $0`: error: argument: -d is required"
+  exit 1 
+fi
+if ! $oflag
+then
+  usage
+  echo "`basename $0`: error: argument: -o is required"
+  exit 1 
+fi
+if ! $bflag
+then
+  usage
+  echo "`basename $0`: error: argument: -b is required"
+  exit 1 
+fi
+if ! $nflag
+then
+  usage
+  echo "`basename $0`: error: argument: -n is required"
+  exit 1 
+fi
+if ! $cflag
+then
+  usage
+  echo "`basename $0`: error: argument: -c is required"
+  exit 1 
+fi
+
+DIRECTORY=$(($GENE/100))
+
+declare -a pids=()
+
+mkdir -p "$OUTPUT_DIRECTORY"/"$DIRECTORY" || error_exit "Error: Cannot create the output directory!"
+
+# run chains
+for CHAIN in `seq 1 $NUM_CHAINS`
+do
+  "$BINARY" sample num_samples="$NUM_SAMPLES" num_warmup="$NUM_SAMPLES" random id="$CHAIN" data file="$DATA_DIRECTORY"/"$DIRECTORY"/data_"$GENE".R output file="$OUTPUT_DIRECTORY"/"$DIRECTORY"/output_"$GENE"_"$CHAIN".csv refresh=10 || error_exit "Error: Stan run failed!" &
+  pids+=($!)
+done
+
+wait ${pids[@]}
+
+# get variable names from the output of the first chain
+grep lp__ "$OUTPUT_DIRECTORY"/"$DIRECTORY"/output_"$GENE"_1.csv > "$OUTPUT_DIRECTORY"/"$DIRECTORY"/combined_"$GENE".csv || error_exit "Error: Concatenation of individual sample files failed!"
+# concatenate samples from all the chains
+sed '/^[#l]/d' "$OUTPUT_DIRECTORY"/"$DIRECTORY"/output_"$GENE"_*.csv >> "$OUTPUT_DIRECTORY"/"$DIRECTORY"/combined_"$GENE".csv || error_exit "Error: Concatenation of individual sample files failed!"
+
+# remove individual csv output files
+rm -f "$OUTPUT_DIRECTORY"/"$DIRECTORY"/output_"$GENE"_*.csv || error_exit "Error: Deletion of individual sample files failed!"
+
+exit 0
