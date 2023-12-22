@@ -28,6 +28,10 @@ $ pip install Splotch
 $ pip install git+https://git@github.com/tare/Splotch.git
 ```
 
+#### CUDA
+
+To install JAX with NVIDIA support, please see [this](https://jax.readthedocs.io/en/latest/installation.html#pip-installation-gpu-cuda-installed-via-pip-easier) page for instructions.
+
 ## Usage
 
 The main steps of Splotch analysis are the following:
