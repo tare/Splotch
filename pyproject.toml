@@ -3,7 +3,7 @@ requires = ["poetry-core>=1.2.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
-name = "Splotch"
+name = "splotch-st"
 version = "0.1.0"
 description = "Splotch is a hierarchical generative probabilistic model for analyzing Spatial Transcriptomics (ST) data"
 authors = [
