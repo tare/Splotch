@@ -16,7 +16,15 @@ NUM_DIMENSIONS = 2
 
 @dataclass
 class SplotchInputData:
-    """Splotch input data."""
+    """Splotch input data.
+
+    Used to store Splotch input data.
+
+    Args:
+        count_data: Counts dataframe.
+        annotation_data: Annotation dataframe.
+        metadata: Metadata dataframe.
+    """
 
     count_data: pd.DataFrame
     annotation_data: pd.DataFrame
@@ -85,7 +93,16 @@ class SplotchInputData:
 
 @dataclass
 class SplotchResult:
-    """Splotch result."""
+    """Splotch result.
+
+    Used to store results from `splotch.inference.run_nuts()` and `splotch.inference.run_svi()`
+
+    Args:
+        metadata: Metadata dataframe.
+        genes: Genes.
+        inference_metrics: Inference metrics corresponding to the genes.
+        posterior_samples: Posterior samples corresponding to the genes.
+    """
 
     metadata: pd.DataFrame
     genes: list[str]
@@ -151,7 +168,18 @@ class SplotchResult:
 
 @dataclass
 class SpotData:
-    """Spot data."""
+    """Spot data.
+
+    Used to group information across genes and spots.
+
+    Args:
+        genes: Genes.
+        level_values: Level category values.
+        metadata: Metadata dataframe.
+        coordinates_orig: Coordinates as strings.
+        spot_counts: Spot counts.
+        annotations_df: Annotation dataframe.
+    """
 
     genes: list[str]
     level_values: pd.Series

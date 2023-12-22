@@ -5,7 +5,7 @@ import numpyro
 import numpyro.distributions as dist
 from jax import Array
 
-# ruff: noqa: N803, N806, PLR0913, PLR0917, PLR2004
+# ruff: noqa: N803, N806, PLR0913, PLR0914, PLR0917, PLR2004
 
 GP_INPUT_DIMENSIONS = 3
 
@@ -19,8 +19,8 @@ def gp(x: Array, L: Array, M: list[int], alpha: Array, length: Array) -> Array:
         x: Input features.
         L: Interval in which the approximation is valid.
         M: Number of basis functions per dimension.
-        alpha: TBA.
-        length: TBA.
+        alpha: Signal magnitude parameter.
+        length: Length-scale parameter.
 
     Returns:
         Sample from Hilbert space approximate Gaussian process.
@@ -115,8 +115,8 @@ def splotch_v1(
         num_categories_per_level: Number of categories per level
         counts: Count for each spot.
         annotations: Annotation for each spot.
-        padded_coordinates: TBA.
-        valid_coordinates: TBA.
+        padded_coordinates: Padded coordinate vectors for each tissue section.
+        valid_coordinates: Indices of unpadded coordinates for each tissue section.
         levels: Level categories for each spot.
         size_factors: Size factor for each spot.
         use_zero_inflated: Whether to use the zero-inflated Poisson likelihood.

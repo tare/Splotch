@@ -101,13 +101,17 @@ def get_tissue_section_output_data(
 ) -> tuple[
     pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame
 ]:
-    """TBA.
+    """Get data in dataframes for a given tissue section.
 
     Args:
-        tissue_section_spot_data: TBA.
-        tissue_section_idx: TBA.
-        count_file: TBA.
-        median_spot_umi_count: TBA.
+        tissue_section_spot_data: Tissue section spot data.
+        tissue_section_idx: Running tissue section index.
+        count_file: Count file name.
+        median_spot_umi_count: Median UMI count across spots. This is used to calculate size factors.
+
+    Returns:
+        Dataframes containing size factor, level, metadata, count, annotation, and coordinate information
+            for the current tissue section.
     """
     spot_multiindex = pd.MultiIndex.from_arrays(
         [
@@ -172,17 +176,23 @@ def process_input_data(
     """Process input data.
 
     Args:
-        metadata_df: TBA.
-        counts_df: TBA.
-        annotations_df: TBA.
-        num_levels: TBA.
-        min_total_count: TBA. Defaults to 100.
-        min_num_spots_per_slide: TBA. Defaults to 10.
-        num_of_neighbors: TBA. Defaults to 8.
-        separate_overlapping_tissue_sections: TBA. Defaults to True.
-        max_num_spots_per_tissue_section: TBA. Defaults to 120.
-        min_num_spots_per_tissue_section: TBA. Defaults to 10.
-        seed: TBA.
+        metadata_df: Metadata dataframe.
+        counts_df: Counts dataframe.
+        annotations_df: Annotations dataframe.
+        num_levels: Number of levels.
+        min_total_count: Minimum UMI count per spot. Spots with less than this many counts are discarded.
+            Defaults to 100.
+        min_num_spots_per_slide: Minimum number of spots per slide.
+            Slides with less than this many spots are discarded. Defaults to 10.
+        num_of_neighbors: Number of neighbors to be considered in the tissue section detection and separation.
+            Defaults to 8.
+        separate_overlapping_tissue_sections: Whether to separate overlapping tissue sections. Defaults to True.
+        max_num_spots_per_tissue_section: Maximum number of spots per tissue sections.
+            Tissue sections with more than this many spots are assumed to be overlapping.
+            Only used when `separate_overlapping_tissue_section = True`. Defaults to 120.
+        min_num_spots_per_tissue_section: Minimum number of spots per tissue sections.
+            Tissue section with less than this many spots are discarded. Defaults to 10.
+        seed: Random seed. This is used to initialize the tissue section separation.
 
     Returns:
         Splotch input data.
@@ -348,17 +358,27 @@ def get_input_data(
 ) -> SplotchInputData:
     """Get Splotch input data.
 
+    This function is a wrapper for process_input_data(). It reads the metadata, count, and annotation files,
+    and then calls process_input_data().
+
     Args:
-        metadata: TBA.
-        num_levels: TBA.
-        min_detection_rate: TBA. Defaults to 0.02.
-        min_total_count: TBA. Defaults to 100.
-        min_num_spots_per_slide: TBA. Defaults to 10.
-        num_of_neighbors: TBA. Defaults to 8.
-        separate_overlapping_tissue_sections: TBA. Defaults to False.
-        max_num_spots_per_tissue_section: TBA. Defaults to 120.
-        min_num_spots_per_tissue_section: TBA. Defaults to 10.
-        seed: TBA. Defaults to 0.
+        metadata: Metadata file name.
+        num_levels: Number of levels.
+        min_detection_rate: Minimum detection rate. Discard any gene that has lower detection rate.
+            Defaults to 0.02.
+        min_total_count: Minimum UMI count per spot. Spots with less than this many counts are discarded.
+            Defaults to 100.
+        min_num_spots_per_slide: Minimum number of spots per slide.
+            Slides with less than this many spots are discarded. Defaults to 10.
+        num_of_neighbors: Number of neighbors to be considered in the tissue section detection and separation.
+            Defaults to 8.
+        separate_overlapping_tissue_sections: Whether to separate overlapping tissue sections. Defaults to True.
+        max_num_spots_per_tissue_section: Maximum number of spots per tissue sections.
+            Tissue sections with more than this many spots are assumed to be overlapping.
+            Only used when `separate_overlapping_tissue_section = True`. Defaults to 120.
+        min_num_spots_per_tissue_section: TBA. Minimum number of spots per tissue sections.
+            Tissue section with less than this many spots are discarded. Defaults to 10.
+        seed: Random seed. This is used to initialize the tissue section separation.
 
     Returns:
         Splotch input data.
@@ -432,11 +452,11 @@ def get_spot_adjacency_matrix(
     num_of_neighbors has to be between 1 and number of coordinates - 2.
 
     Args:
-        coordinates: TBA.
-        num_of_neighbors: TBA.
+        coordinates: Spot coordinates.
+        num_of_neighbors: Number of neighbors to be considered.
 
     Returns:
-        TBA.
+        Adjacency matrix. Self-loops are not considered.
 
     Raises:
         ValueError if num_of_neighbors is outside of the reasonable range.
@@ -462,10 +482,10 @@ def detect_tissue_sections(
 
     Args:
         coordinates: Coordinates of the spots on the slide.
-        num_of_neighbors: TBA.
+        num_of_neighbors: Number of neighbors.
 
     Returns:
-        TBA.
+        Spot indices grouped by tissue sections.
     """
     adjacency_matrix = get_spot_adjacency_matrix(coordinates, num_of_neighbors)
     spot_graph = nx.from_numpy_array(adjacency_matrix)
@@ -488,15 +508,19 @@ def separate_tissue_sections(
 ) -> list[set[int]]:
     """Separate tissue sections.
 
+    The tissue section separation step is repeated to ensure all tissue sections
+    have at most `max_num_spots_per_tissue_section` spots.
+
     Args:
-        coordinates: TBA.
-        tissue_sections: TBA.
-        num_of_neighbors: TBA.
-        max_num_spots_per_tissue_section: TBA.
-        seed: TBA.
+        coordinates: Spot coordinates.
+        tissue_sections: Spot indices grouped by tissue sections.
+        num_of_neighbors: Number of neighbors.
+        max_num_spots_per_tissue_section: Maximum number of spots per tissue sections.
+            Tissue sections with more than this many spots are assumed to be overlapping.
+        seed: Random seed. This is used to initialize the tissue section separation.
 
     Return:
-        TBA.
+        Spot indices grouped by separated tissue sections.
     """
     adjacency_matrix = get_spot_adjacency_matrix(coordinates, num_of_neighbors)
 
@@ -531,12 +555,12 @@ def separate_tissue_section(
     """Separate overlapping tissue sections.
 
     Args:
-        tissue_section: TBA.
-        adjacency_matrix: TBA.
-        seed: TBA.
+        tissue_section: Spot indices corresponding to the tissue section of interest.
+        adjacency_matrix: Adjacency matrix.
+        seed: Random seed. This is used to initialize the tissue section separation.
 
     Returns:
-        TBA.
+        Spot indices grouped by separated tissue sections.
     """
     logger.warning(
         "Tissue section has %d spots. Let us try to break the tissue section into two.",
@@ -556,11 +580,13 @@ def separate_tissue_section(
 def get_mcmc_summary(posterior_samples: Array) -> pd.DataFrame:
     """Get MCMC summary DataFrame.
 
+    This function uses `numpyro.diagnostics.summary()`.
+
     Args:
         posterior_samples: Posterior samples.
 
     Returns:
-        DataFrame.
+        DataFrame containing diagnostics of posterior samples.
     """
 
     def process_variable(data: Mapping[str, np.ndarray | np.float64]) -> dict[str, Any]:

@@ -17,9 +17,9 @@ def plot_coefficients(
     """Plot coefficients.
 
     Args:
-        splotch_input_data: TBA.
-        splotch_result: TBA.
-        gene: TBA.
+        splotch_input_data: Splotch input data.
+        splotch_result: Splotch result data.
+        gene: Gene of interest.
 
     Returns:
         Matplotlib figure object.
@@ -57,8 +57,8 @@ def plot_rates_on_slides(splotch_result: SplotchResult, gene: str) -> Figure:
     """Plot rate estimates on slides.
 
     Args:
-        splotch_result: TBA.
-        gene: TBA.
+        splotch_result: Splotch result data.
+        gene: Gene of interest.
 
     Returns:
         Matplotlib figure object.
@@ -133,9 +133,9 @@ def plot_variable_on_slides(
     Variable has to be scalar per spot.
 
     Args:
-        splotch_result: TBA.
-        gene: TBA.
-        variable: TBA.
+        splotch_result: Splotch result data.
+        gene: Gene of interest.
+        variable: Variable of interest. Defaults to `f`.
 
     Returns:
         Matplotlib figure object.
@@ -212,9 +212,11 @@ def plot_rates_in_common_coordinate_system(
 ) -> Figure:
     """Plot rate estimates in common coordinate system.
 
+    Before using this function, please run splotch.registration.register().
+
     Args:
-        splotch_result: TBA.
-        gene: TBA.
+        splotch_result: Splotch result data.
+        gene: Gene of interest.
 
     Returns:
         Matplotlib figure object.
@@ -261,8 +263,10 @@ def plot_annotations_in_common_coordinate_system(
 ) -> Figure:
     """Plot annotations in common coordinate system.
 
+    Before using this function, please run splotch.registration.register().
+
     Args:
-        splotch_input_data: TBA.
+        splotch_input_data: Splotch input data.
 
     Returns:
         Matplotlib figure object.
@@ -301,7 +305,7 @@ def plot_annotations_on_slides(splotch_input_data: SplotchInputData) -> Figure:
     """Plot annotations on slides.
 
     Args:
-        splotch_input_data: TBA.
+        splotch_input_data: Splotch input data.
 
     Returns:
         Matplotlib figure object.
@@ -381,7 +385,7 @@ def plot_tissue_sections_on_slides(splotch_input_data: SplotchInputData) -> Figu
     """Plot detected tissue sections on slides.
 
     Args:
-        splotch_input_data: TBA.
+        splotch_input_data: Splotch input data.
 
     Returns:
         Matplotlib figure object.

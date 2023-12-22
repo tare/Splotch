@@ -24,11 +24,13 @@ def register(
 ) -> None:
     """Register tissue sections using AARs.
 
+    This adds the columns `x_registration` and `y_registration` to `splotch_input_data`.
+
     Args:
         key: PRNGKey.
-        splotch_input_data: TBA.
-        num_steps: TBA.
-        aars_of_interest: TBA.
+        splotch_input_data: Splotch input data.
+        num_steps: Number optimization steps.
+        aars_of_interest: AARs to be considered in the registration. Defaults to all.
     """
     if aars_of_interest is None:
         aars_of_interest = list(splotch_input_data.annotation_data.columns)
@@ -87,10 +89,10 @@ def register_tissue_sections(
 
     Args:
         key: PRNGKey.
-        x: TBA.
-        y: TBA.
-        num_steps: TBA.
-        aars_of_interest: TBA.
+        x: Coordinates of the spots.
+        y: AAR information of the spots.
+        num_steps: Number of optimization steps.
+        aars_of_interest: AARs to be considered in the registration.
 
     Returns:
         Registered coordinates.
@@ -178,9 +180,9 @@ def register_consensus(
     """Register consensus point cloud.
 
     Args:
-        x: Coordinates.
-        y: Annotations.
-        aars_of_interest: AARs of interest.
+        x: Coordinates of the spots.
+        y: AAR information of the spots.
+        aars_of_interest: AARs to be considered in the registration.
 
     Returns:
         Registered coordinates.

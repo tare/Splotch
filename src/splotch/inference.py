@@ -82,8 +82,8 @@ def get_splotch_kwargs(
     """Return.
 
     Args:
-        splotch_input_data: TBA.
-        use_zero_inflated: TBA.
+        splotch_input_data: Splotch input data.
+        use_zero_inflated: Whether to use the zero-inflated Poisson likelihood.
 
     Returns:
         Dictionary with data.
