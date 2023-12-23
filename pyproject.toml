@@ -27,7 +27,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.13"
+python = "^3.10"
 numpyro = "^0.13.2"
 matplotlib = "^3.8.1"
 jupyterlab = {version = "^4.0.8", optional = true}
