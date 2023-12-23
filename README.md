@@ -19,7 +19,7 @@ The Splotch code in this repository supports single-, two-, and three-level expe
 ### PyPI
 
 ```console
-$ pip install Splotch
+$ pip install splotch-st
 ```
 
 ### GitHub
