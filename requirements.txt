@@ -1,7 +1,0 @@
-pandas~=1.5.2
-numpy~=1.24.1
-scipy~=1.10.0
-scikit-image~=0.19.3
-scikit-learn~=1.2.0
-jax~=0.4.1
-jaxlib~=0.4.1

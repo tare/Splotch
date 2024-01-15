@@ -1,0 +1,11 @@
+name	level_3	level_1	level_2	count_file	annotation_file	image_file
+L7CN36_C1	1394	G93A p120	F	count_tables/L7CN36_C1_stdata_aligned_counts_IDs.txt	annotations/L7CN36_C1.tsv	images/L7CN36_C1_HE.jpg
+L7CN36_C2	1394	G93A p120	F	count_tables/L7CN36_C2_stdata_aligned_counts_IDs.txt	annotations/L7CN36_C2.tsv	images/L7CN36_C2_HE.jpg
+L7CN30_C1	2967	WT p120	M	count_tables/L7CN30_C1_stdata_aligned_counts_IDs.txt	annotations/L7CN30_C1.tsv	images/L7CN30_C1_HE.jpg
+L7CN30_C2	2967	WT p120	M	count_tables/L7CN30_C2_stdata_aligned_counts_IDs.txt	annotations/L7CN30_C2.tsv	images/L7CN30_C2_HE.jpg
+L7CN69_D1	1310	WT p120	M	count_tables/L7CN69_D1_stdata_aligned_counts_IDs.txt	annotations/L7CN69_D1.tsv	images/L7CN69_D1_HE.jpg
+L7CN69_D2	1310	WT p120	M	count_tables/L7CN69_D2_stdata_aligned_counts_IDs.txt	annotations/L7CN69_D2.tsv	images/L7CN69_D2_HE.jpg
+CN96_E1	1040	WT p120	F	count_tables/CN96_E1_stdata_aligned_counts_IDs.txt	annotations/CN96_E1.tsv	images/CN96_E1_HE.jpg
+CN96_E2	1040	WT p120	F	count_tables/CN96_E2_stdata_aligned_counts_IDs.txt	annotations/CN96_E2.tsv	images/CN96_E2_HE.jpg
+CN93_E1	975	G93A p120	M	count_tables/CN93_E1_stdata_aligned_counts_IDs.txt	annotations/CN93_E1.tsv	images/CN93_E1_HE.jpg
+CN93_E2	975	G93A p120	M	count_tables/CN93_E2_stdata_aligned_counts_IDs.txt	annotations/CN93_E2.tsv	images/CN93_E2_HE.jpg
