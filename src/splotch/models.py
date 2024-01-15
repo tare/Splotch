@@ -183,7 +183,7 @@ def splotch_v1(
             beta_level_1[levels[:, 0], annotations]
             + beta_level_2[levels[:, 1], annotations],
         )
-    elif num_levels == 3:
+    else:
         beta = numpyro.deterministic(
             "beta",
             beta_level_1[levels[:, 0], annotations]

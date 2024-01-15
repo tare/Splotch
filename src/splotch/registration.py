@@ -141,7 +141,7 @@ def register_tissue_sections(
     opt_init, opt_update, get_params = adagrad(step_size=0.1, momentum=0.9)
 
     @jit
-    def step(i: int, opt_state: OptimizerState) -> OptimizerState:
+    def step(i: int, opt_state: OptimizerState) -> OptimizerState:  # pragma: no cover
         params = get_params(opt_state)
         g = grad(loss)(params)
         return opt_update(i, g, opt_state)

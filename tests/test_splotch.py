@@ -3,12 +3,16 @@ import os
 import re
 from io import BytesIO
 
+import jax.numpy as jnp
+import matplotlib
 import numpy as np
 import pandas as pd
 import pytest
 import scipy.stats
 from jax import random
-from splotch.inference import run_nuts, run_svi
+from matplotlib.figure import Figure
+from splotch.inference import get_splotch_kwargs, run_nuts, run_svi
+from splotch.models import get_default_priors, splotch_v1
 from splotch.registration import register
 from splotch.utils import (
     SplotchInputData,
@@ -22,6 +26,17 @@ from splotch.utils import (
     savagedickey,
     separate_tissue_sections,
 )
+from splotch.visualization import (
+    plot_annotations_in_common_coordinate_system,
+    plot_annotations_on_slides,
+    plot_coefficients,
+    plot_rates_in_common_coordinate_system,
+    plot_rates_on_slides,
+    plot_tissue_sections_on_slides,
+    plot_variable_on_slides,
+)
+
+matplotlib.use("Agg")
 
 # this is needed for the tests using pmap
 os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"
@@ -426,11 +441,68 @@ def splotchinputdata() -> (
         min_total_count=1,
         min_num_spots_per_slide=1,
         num_of_neighbors=2,
-        separate_overlapping_tissue_sections=False,
+        separate_overlapping_tissue_sections=True,
         min_num_spots_per_tissue_section=1,
     )
 
     return splotch_input_data, metadata_df, counts_df, annotations_df
+
+
+@pytest.fixture()
+def splotchinputdata_low_coverage() -> (
+    tuple[SplotchInputData, pd.DataFrame, pd.DataFrame, pd.DataFrame]
+):
+    """SplotchInputData."""
+    count_files = ["count_file_1.tsv", "count_file_2.tsv"]
+    annotation_files = ["annotation_file_1.tsv", "annotation_file_2.tsv"]
+
+    metadata_df = pd.DataFrame(
+        {
+            "level_1": ["cond1", "cond2"],
+            "count_file": count_files,
+            "annotation_file": annotation_files,
+            "image_file": ["image_1.jpeg", "image_2.jpeg"],
+        }
+    )
+    counts_dfs = [
+        pd.DataFrame(
+            {"10_10": [2, 1], "11_10": [5, 10], "13_10": [1, 1], "12_10": [1, 2]},
+            index=["g1", "g2"],
+        ),
+        pd.DataFrame(
+            {"5_3": [12, 5], "5_2": [5, 1], "6_3": [3, 1], "6_2": [1, 4]},
+            index=["g1", "g2"],
+        ),
+    ]
+
+    for filename, count_df in zip(count_files, counts_dfs):
+        count_df.columns = pd.MultiIndex.from_product(
+            [[filename], count_df.columns], names=["file", "coordinate"]
+        )
+        count_df.index.name = "gene"
+
+    counts_df = pd.concat(counts_dfs, copy=False, axis=1, sort=True)
+
+    annotation_dfs = [
+        pd.DataFrame(
+            {"1_10": [1, 0], "1_11": [0, 1], "1_12": [0, 1], "1_13": [1, 0]},
+            index=["aar1", "aar2"],
+        ),
+        pd.DataFrame(
+            {"5_3": [1, 0], "5_2": [0, 1], "6_3": [0, 1], "6_2": [1, 0]},
+            index=["aar1", "aar2"],
+        ),
+    ]
+
+    for filename, annotation_df in zip(annotation_files, annotation_dfs):
+        annotation_df.columns = pd.MultiIndex.from_product(
+            [[filename], annotation_df.columns], names=["file", "coordinate"]
+        )
+        annotation_df.index.name = "aar"
+
+    annotations_df = pd.concat(annotation_dfs, copy=False, axis=1, sort=True)
+
+    return metadata_df, counts_df, annotations_df
 
 
 @pytest.fixture()
@@ -528,6 +600,340 @@ def splotchinputdata_inference() -> SplotchInputData:
             "count_file": count_files,
             "annotation_file": annotation_files,
             "image_file": ["image_1.jpeg", "image_2.jpeg"],
+        }
+    )
+    counts_dfs = [
+        pd.DataFrame(
+            {"1_1": [2, 1], "2_2": [5, 10], "3_3": [1, 1], "4_4": [1, 2]},
+            index=["g1", "g2"],
+        ),
+        pd.DataFrame(
+            {
+                "8_8": [10, 5],
+                "7_7": [5, 1],
+                "6_6": [3, 1],
+                "5_5": [1, 4],
+                "11_1": [10, 5],
+                "11_0": [5, 1],
+                "11_-1": [3, 1],
+                "11_-2": [1, 4],
+            },
+            index=["g1", "g2"],
+        ),
+    ]
+
+    for filename, count_df in zip(count_files, counts_dfs):
+        count_df.columns = pd.MultiIndex.from_product(
+            [[filename], count_df.columns], names=["file", "coordinate"]
+        )
+        count_df.index.name = "gene"
+
+    counts_df = pd.concat(counts_dfs, copy=False, axis=1, sort=True)
+
+    annotation_dfs = [
+        pd.DataFrame(
+            {"1_1": [1, 0], "2_2": [0, 1], "3_3": [0, 1], "4_4": [1, 0]},
+            index=["aar1", "aar2"],
+        ),
+        pd.DataFrame(
+            {
+                "8_8": [1, 0],
+                "7_7": [0, 1],
+                "6_6": [0, 1],
+                "5_5": [1, 0],
+                "11_1": [1, 0],
+                "11_0": [0, 1],
+                "11_-1": [0, 1],
+                "11_-2": [1, 0],
+            },
+            index=["aar1", "aar2"],
+        ),
+    ]
+
+    for filename, annotation_df in zip(annotation_files, annotation_dfs):
+        annotation_df.columns = pd.MultiIndex.from_product(
+            [[filename], annotation_df.columns], names=["file", "coordinate"]
+        )
+        annotation_df.index.name = "aar"
+
+    annotations_df = pd.concat(annotation_dfs, copy=False, axis=1, sort=True)
+
+    return process_input_data(
+        metadata_df,
+        counts_df,
+        annotations_df,
+        num_levels=1,
+        min_total_count=1,
+        min_num_spots_per_slide=1,
+        num_of_neighbors=2,
+        separate_overlapping_tissue_sections=False,
+        min_num_spots_per_tissue_section=1,
+    )
+
+
+@pytest.fixture()
+def splotchinputdata_inference_2() -> SplotchInputData:
+    """SplotchInputData."""
+    count_files = ["count_file_1.tsv", "count_file_2.tsv"]
+    annotation_files = ["annotation_file_1.tsv", "annotation_file_2.tsv"]
+
+    metadata_df = pd.DataFrame(
+        {
+            "level_1": ["cond1", "cond2"],
+            "count_file": count_files,
+            "annotation_file": annotation_files,
+            "image_file": ["image_2.jpeg", "image_1.jpeg"],
+        }
+    )
+    counts_dfs = [
+        pd.DataFrame(
+            {"1_1": [2, 1], "2_2": [5, 10], "3_3": [1, 1], "4_4": [1, 2]},
+            index=["g1", "g2"],
+        ),
+        pd.DataFrame(
+            {
+                "8_8": [10, 5],
+                "7_7": [5, 1],
+                "6_6": [3, 1],
+                "5_5": [1, 4],
+                "11_1": [10, 5],
+                "11_0": [5, 1],
+                "11_-1": [3, 1],
+                "11_-2": [1, 4],
+            },
+            index=["g1", "g2"],
+        ),
+    ]
+
+    for filename, count_df in zip(count_files, counts_dfs):
+        count_df.columns = pd.MultiIndex.from_product(
+            [[filename], count_df.columns], names=["file", "coordinate"]
+        )
+        count_df.index.name = "gene"
+
+    counts_df = pd.concat(counts_dfs, copy=False, axis=1, sort=True)
+
+    annotation_dfs = [
+        pd.DataFrame(
+            {"1_1": [1, 0], "2_2": [0, 1], "3_3": [0, 1], "4_4": [1, 0]},
+            index=["aar1", "aar2"],
+        ),
+        pd.DataFrame(
+            {
+                "8_8": [1, 0],
+                "7_7": [0, 1],
+                "6_6": [0, 1],
+                "5_5": [1, 0],
+                "11_1": [1, 0],
+                "11_0": [0, 1],
+                "11_-1": [0, 1],
+                "11_-2": [1, 0],
+            },
+            index=["aar1", "aar2"],
+        ),
+    ]
+
+    for filename, annotation_df in zip(annotation_files, annotation_dfs):
+        annotation_df.columns = pd.MultiIndex.from_product(
+            [[filename], annotation_df.columns], names=["file", "coordinate"]
+        )
+        annotation_df.index.name = "aar"
+
+    annotations_df = pd.concat(annotation_dfs, copy=False, axis=1, sort=True)
+
+    return process_input_data(
+        metadata_df,
+        counts_df,
+        annotations_df,
+        num_levels=1,
+        min_total_count=1,
+        min_num_spots_per_slide=1,
+        num_of_neighbors=2,
+        separate_overlapping_tissue_sections=False,
+        min_num_spots_per_tissue_section=1,
+    )
+
+
+@pytest.fixture()
+def splotchinputdata_inference_two_levels() -> SplotchInputData:
+    """SplotchInputData."""
+    count_files = ["count_file_1.tsv", "count_file_2.tsv"]
+    annotation_files = ["annotation_file_1.tsv", "annotation_file_2.tsv"]
+
+    metadata_df = pd.DataFrame(
+        {
+            "level_1": ["cond1", "cond2"],
+            "level_2": ["cond3", "cond3"],
+            "count_file": count_files,
+            "annotation_file": annotation_files,
+            "image_file": ["image_1.jpeg", "image_2.jpeg"],
+        }
+    )
+    counts_dfs = [
+        pd.DataFrame(
+            {"1_1": [2, 1], "2_2": [5, 10], "3_3": [1, 1], "4_4": [1, 2]},
+            index=["g1", "g2"],
+        ),
+        pd.DataFrame(
+            {
+                "8_8": [10, 5],
+                "7_7": [5, 1],
+                "6_6": [3, 1],
+                "5_5": [1, 4],
+                "11_1": [10, 5],
+                "11_0": [5, 1],
+                "11_-1": [3, 1],
+                "11_-2": [1, 4],
+            },
+            index=["g1", "g2"],
+        ),
+    ]
+
+    for filename, count_df in zip(count_files, counts_dfs):
+        count_df.columns = pd.MultiIndex.from_product(
+            [[filename], count_df.columns], names=["file", "coordinate"]
+        )
+        count_df.index.name = "gene"
+
+    counts_df = pd.concat(counts_dfs, copy=False, axis=1, sort=True)
+
+    annotation_dfs = [
+        pd.DataFrame(
+            {"1_1": [1, 0], "2_2": [0, 1], "3_3": [0, 1], "4_4": [1, 0]},
+            index=["aar1", "aar2"],
+        ),
+        pd.DataFrame(
+            {
+                "8_8": [1, 0],
+                "7_7": [0, 1],
+                "6_6": [0, 1],
+                "5_5": [1, 0],
+                "11_1": [1, 0],
+                "11_0": [0, 1],
+                "11_-1": [0, 1],
+                "11_-2": [1, 0],
+            },
+            index=["aar1", "aar2"],
+        ),
+    ]
+
+    for filename, annotation_df in zip(annotation_files, annotation_dfs):
+        annotation_df.columns = pd.MultiIndex.from_product(
+            [[filename], annotation_df.columns], names=["file", "coordinate"]
+        )
+        annotation_df.index.name = "aar"
+
+    annotations_df = pd.concat(annotation_dfs, copy=False, axis=1, sort=True)
+
+    return process_input_data(
+        metadata_df,
+        counts_df,
+        annotations_df,
+        num_levels=2,
+        min_total_count=1,
+        min_num_spots_per_slide=1,
+        num_of_neighbors=2,
+        separate_overlapping_tissue_sections=False,
+        min_num_spots_per_tissue_section=1,
+    )
+
+
+@pytest.fixture()
+def splotchinputdata_inference_three_levels() -> SplotchInputData:
+    """SplotchInputData."""
+    count_files = ["count_file_1.tsv", "count_file_2.tsv"]
+    annotation_files = ["annotation_file_1.tsv", "annotation_file_2.tsv"]
+
+    metadata_df = pd.DataFrame(
+        {
+            "level_1": ["cond1", "cond2"],
+            "level_2": ["cond3", "cond3"],
+            "level_3": ["cond4", "cond5"],
+            "count_file": count_files,
+            "annotation_file": annotation_files,
+            "image_file": ["image_1.jpeg", "image_2.jpeg"],
+        }
+    )
+    counts_dfs = [
+        pd.DataFrame(
+            {"1_1": [2, 1], "2_2": [5, 10], "3_3": [1, 1], "4_4": [1, 2]},
+            index=["g1", "g2"],
+        ),
+        pd.DataFrame(
+            {
+                "8_8": [10, 5],
+                "7_7": [5, 1],
+                "6_6": [3, 1],
+                "5_5": [1, 4],
+                "11_1": [10, 5],
+                "11_0": [5, 1],
+                "11_-1": [3, 1],
+                "11_-2": [1, 4],
+            },
+            index=["g1", "g2"],
+        ),
+    ]
+
+    for filename, count_df in zip(count_files, counts_dfs):
+        count_df.columns = pd.MultiIndex.from_product(
+            [[filename], count_df.columns], names=["file", "coordinate"]
+        )
+        count_df.index.name = "gene"
+
+    counts_df = pd.concat(counts_dfs, copy=False, axis=1, sort=True)
+
+    annotation_dfs = [
+        pd.DataFrame(
+            {"1_1": [1, 0], "2_2": [0, 1], "3_3": [0, 1], "4_4": [1, 0]},
+            index=["aar1", "aar2"],
+        ),
+        pd.DataFrame(
+            {
+                "8_8": [1, 0],
+                "7_7": [0, 1],
+                "6_6": [0, 1],
+                "5_5": [1, 0],
+                "11_1": [1, 0],
+                "11_0": [0, 1],
+                "11_-1": [0, 1],
+                "11_-2": [1, 0],
+            },
+            index=["aar1", "aar2"],
+        ),
+    ]
+
+    for filename, annotation_df in zip(annotation_files, annotation_dfs):
+        annotation_df.columns = pd.MultiIndex.from_product(
+            [[filename], annotation_df.columns], names=["file", "coordinate"]
+        )
+        annotation_df.index.name = "aar"
+
+    annotations_df = pd.concat(annotation_dfs, copy=False, axis=1, sort=True)
+
+    return process_input_data(
+        metadata_df,
+        counts_df,
+        annotations_df,
+        num_levels=3,
+        min_total_count=1,
+        min_num_spots_per_slide=1,
+        num_of_neighbors=2,
+        separate_overlapping_tissue_sections=False,
+        min_num_spots_per_tissue_section=1,
+    )
+
+
+@pytest.fixture()
+def splotchinputdata_inference_wout_images() -> SplotchInputData:
+    """SplotchInputData."""
+    count_files = ["count_file_1.tsv", "count_file_2.tsv"]
+    annotation_files = ["annotation_file_1.tsv", "annotation_file_2.tsv"]
+
+    metadata_df = pd.DataFrame(
+        {
+            "level_1": ["cond1", "cond2"],
+            "count_file": count_files,
+            "annotation_file": annotation_files,
         }
     )
     counts_dfs = [
@@ -981,7 +1387,35 @@ def test_splotchinputdata(
     )
 
 
-def test_register(splotchinputdata_registration: SplotchInputData) -> None:
+def test_splotchinputdata_low_coverage(
+    splotchinputdata_low_coverage: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test SplotchInputData with low coverage slides and spots."""
+    metadata_df, counts_df, annotations_df = splotchinputdata_low_coverage
+    with pytest.raises(ValueError, match="No valid tissue sections found"):
+        process_input_data(
+            metadata_df,
+            counts_df,
+            annotations_df,
+            num_levels=1,
+            min_total_count=5,
+            min_num_spots_per_slide=1,
+            num_of_neighbors=1,
+            separate_overlapping_tissue_sections=False,
+            min_num_spots_per_tissue_section=5,
+        )
+    assert (
+        caplog.records[0].msg
+        == "%s has less than %d valid spots. Maybe coordinates do not match in the count and annotation files."
+    )
+    assert caplog.records[1].msg == "Discarding %d spots due to low sequencing depth."
+    assert caplog.records[2].msg == "Discarding a tissue section with %d spots"
+
+
+def test_register(
+    splotchinputdata_registration: SplotchInputData, caplog: pytest.LogCaptureFixture
+) -> None:
     """Test register()."""
     key = random.PRNGKey(0)
     key, key_ = random.split(key, 2)
@@ -994,15 +1428,47 @@ def test_register(splotchinputdata_registration: SplotchInputData) -> None:
         np.isclose(splotchinputdata_registration.metadata.y_registration, 0, atol=1e-2)
     )
 
+    register(
+        key_, splotchinputdata_registration, num_steps=10_000, aars_of_interest=["aar1"]
+    )
+    assert all(
+        col in splotchinputdata_registration.metadata.columns
+        for col in ["x_registration", "y_registration"]
+    )
+    assert np.all(
+        np.isclose(splotchinputdata_registration.metadata.y_registration, 0, atol=1e-2)
+    )
 
+    register(
+        key_, splotchinputdata_registration, num_steps=2, aars_of_interest=["aar1"]
+    )
+    assert caplog.records[0].msg == "Not converged after %d iterations"
+
+
+@pytest.mark.parametrize(
+    "test_input",
+    [
+        "splotchinputdata_inference",
+        "splotchinputdata_inference_two_levels",
+        "splotchinputdata_inference_three_levels",
+    ],
+)
+@pytest.mark.parametrize(
+    "use_zero_inflated",
+    [False, True],
+)
 @pytest.mark.parametrize(
     "map_method",
     ["map", "vmap", "pmap"],
 )
 def test_run_nuts(
-    splotchinputdata_inference: SplotchInputData, map_method: str
+    test_input: SplotchInputData,
+    map_method: str,
+    use_zero_inflated: bool,
+    request: pytest.FixtureRequest,
 ) -> None:
     """Test run_nuts()."""
+    splotchinputdata_inference = request.getfixturevalue(test_input)
     key = random.PRNGKey(0)
     key, key_ = random.split(key, 2)
     splotch_result_nuts_batch_1 = run_nuts(
@@ -1013,6 +1479,7 @@ def test_run_nuts(
         num_warmup=10,
         num_samples=10,
         num_chains=4,
+        use_zero_inflated=use_zero_inflated,
     )
     assert splotch_result_nuts_batch_1.genes == ["g1"]
     assert splotch_result_nuts_batch_1.posterior_samples["lambda"].shape == (
@@ -1030,6 +1497,7 @@ def test_run_nuts(
         num_warmup=10,
         num_samples=10,
         num_chains=4,
+        use_zero_inflated=use_zero_inflated,
     )
     assert splotch_result_nuts_batch_2.genes == ["g2"]
     assert splotch_result_nuts_batch_2.posterior_samples["lambda"].shape == (
@@ -1057,11 +1525,29 @@ def test_run_nuts(
 
 
 @pytest.mark.parametrize(
+    "test_input",
+    [
+        "splotchinputdata_inference",
+        "splotchinputdata_inference_two_levels",
+        "splotchinputdata_inference_three_levels",
+    ],
+)
+@pytest.mark.parametrize(
+    "use_zero_inflated",
+    [False, True],
+)
+@pytest.mark.parametrize(
     "map_method",
     ["map", "vmap", "pmap"],
 )
-def test_run_svi(splotchinputdata_inference: SplotchInputData, map_method: str) -> None:
+def test_run_svi(
+    test_input: SplotchInputData,
+    map_method: str,
+    use_zero_inflated: bool,
+    request: pytest.FixtureRequest,
+) -> None:
     """Test run_svi()."""
+    splotchinputdata_inference = request.getfixturevalue(test_input)
     key = random.PRNGKey(0)
     key, key_ = random.split(key, 2)
     splotch_result_svi_batch_1 = run_svi(
@@ -1071,6 +1557,7 @@ def test_run_svi(splotchinputdata_inference: SplotchInputData, map_method: str) 
         map_method=map_method,
         num_steps=50,
         num_samples=10,
+        use_zero_inflated=use_zero_inflated,
     )
     assert splotch_result_svi_batch_1.genes == ["g1"]
     assert splotch_result_svi_batch_1.posterior_samples["lambda"].shape == (
@@ -1087,6 +1574,7 @@ def test_run_svi(splotchinputdata_inference: SplotchInputData, map_method: str) 
         map_method=map_method,
         num_steps=50,
         num_samples=10,
+        use_zero_inflated=use_zero_inflated,
     )
     assert splotch_result_svi_batch_2.genes == ["g2"]
     assert splotch_result_svi_batch_2.posterior_samples["lambda"].shape == (
@@ -1107,3 +1595,165 @@ def test_run_svi(splotchinputdata_inference: SplotchInputData, map_method: str) 
     )
 
     assert splotch_result_svi.inference_metrics["losses"].shape == (2, 50)
+
+
+def test_run_nuts_invalid_map_method(
+    splotchinputdata_inference: SplotchInputData,
+) -> None:
+    """Test run_nuts()."""
+    key = random.PRNGKey(0)
+    key, key_ = random.split(key, 2)
+    map_method = "mapp"
+    with pytest.raises(ValueError, match="map_method should be pmap, vmap or map"):
+        run_nuts(
+            key_,
+            ["g1"],
+            splotchinputdata_inference,
+            map_method=map_method,
+            num_warmup=10,
+            num_samples=10,
+            num_chains=4,
+        )
+
+
+def test_run_svi_invalid_map_method(
+    splotchinputdata_inference: SplotchInputData,
+) -> None:
+    """Test run_svi()."""
+    key = random.PRNGKey(0)
+    key, key_ = random.split(key, 2)
+    map_method = "mapp"
+    with pytest.raises(ValueError, match="map_method should be pmap, vmap or map"):
+        run_svi(
+            key_,
+            ["g1"],
+            splotchinputdata_inference,
+            map_method=map_method,
+            num_steps=50,
+            num_samples=10,
+        )
+
+
+def test_splotch_result_add(
+    splotchinputdata_inference: SplotchInputData,
+    splotchinputdata_inference_2: SplotchInputData,
+) -> None:
+    """Test run_nuts()."""
+    key = random.PRNGKey(0)
+    key, key_ = random.split(key, 2)
+
+    splotch_result_nuts_batch_1 = run_nuts(
+        key_,
+        ["g1"],
+        splotchinputdata_inference,
+        num_warmup=10,
+        num_samples=10,
+        num_chains=1,
+    )
+    splotch_result_nuts_batch_2 = run_nuts(
+        key_,
+        ["g2"],
+        splotchinputdata_inference_2,
+        num_warmup=10,
+        num_samples=10,
+        num_chains=1,
+    )
+    with pytest.raises(ValueError, match="Metadata are not the same"):
+        splotch_result_nuts_batch_1 + splotch_result_nuts_batch_2
+
+    splotch_result_nuts_batch_1 = run_nuts(
+        key_,
+        ["g1"],
+        splotchinputdata_inference,
+        num_warmup=10,
+        num_samples=10,
+        num_chains=1,
+    )
+    splotch_result_nuts_batch_2 = run_nuts(
+        key_,
+        ["g1"],
+        splotchinputdata_inference,
+        num_warmup=10,
+        num_samples=10,
+        num_chains=1,
+    )
+    with pytest.raises(ValueError, match="Genes overlap"):
+        splotch_result_nuts_batch_1 + splotch_result_nuts_batch_2
+
+    splotch_result_nuts_batch_1 = run_nuts(
+        key_,
+        ["g1"],
+        splotchinputdata_inference,
+        num_warmup=10,
+        num_samples=10,
+        num_chains=1,
+    )
+    splotch_result_svi_batch_2 = run_svi(
+        key_,
+        ["g2"],
+        splotchinputdata_inference,
+        num_steps=50,
+        num_samples=10,
+    )
+    with pytest.raises(
+        ValueError, match="Cannot combine results from different methods"
+    ):
+        splotch_result_nuts_batch_1 + splotch_result_svi_batch_2
+
+
+def test_splotch_v1_invalid_number_of_levels(
+    splotchinputdata_inference: SplotchInputData,
+) -> None:
+    """Test splotch_v1() with invalid number of levels."""
+    genes = ["g1"]
+    model_kwargs = get_splotch_kwargs(
+        splotchinputdata_inference, get_default_priors, False
+    ) | {"counts": jnp.asarray(splotchinputdata_inference.counts(genes))}
+    model_kwargs["num_levels"] = 4
+
+    with pytest.raises(ValueError, match="Only 1, 2, or 3 levels are supported"):
+        splotch_v1(**model_kwargs)
+
+
+def test_visualization(
+    splotchinputdata_inference_wout_images: SplotchInputData,
+) -> None:
+    """Test visualization routines."""
+    assert isinstance(
+        plot_annotations_on_slides(splotchinputdata_inference_wout_images), Figure
+    )
+    plot_tissue_sections_on_slides(splotchinputdata_inference_wout_images)
+
+    key = random.PRNGKey(0)
+    key, key_ = random.split(key, 2)
+    register(key_, splotchinputdata_inference_wout_images, num_steps=10_000)
+
+    assert isinstance(
+        plot_annotations_in_common_coordinate_system(
+            splotchinputdata_inference_wout_images
+        ),
+        Figure,
+    )
+
+    gene = "g1"
+    splotch_result_nuts = run_nuts(
+        key_,
+        [gene],
+        splotchinputdata_inference_wout_images,
+        map_method="map",
+        num_warmup=10,
+        num_samples=10,
+        num_chains=4,
+    )
+
+    assert isinstance(plot_rates_on_slides(splotch_result_nuts, gene), Figure)
+    assert isinstance(plot_variable_on_slides(splotch_result_nuts, gene, "f"), Figure)
+    assert isinstance(
+        plot_coefficients(
+            splotchinputdata_inference_wout_images, splotch_result_nuts, gene
+        ),
+        Figure,
+    )
+    assert isinstance(
+        plot_rates_in_common_coordinate_system(splotch_result_nuts, gene), Figure
+    )

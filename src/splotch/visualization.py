@@ -11,6 +11,7 @@ from splotch.dataclasses import SplotchInputData, SplotchResult
 
 # ruff: noqa: PLR0914
 
+
 LOAD_SLIDE_IMAGE_CALLABLE = Callable[
     [SplotchInputData | SplotchResult, str], Image.Image
 ]
@@ -32,7 +33,7 @@ LOAD_SLIDE_COORDINATES_AND_IMAGE_CALLABLE = Callable[
 ]
 
 
-def load_slide_image(
+def load_slide_image(  # pragma: no cover
     splotch_data: SplotchInputData | SplotchResult, count_file: str
 ) -> Image.Image:
     """Load slide image.
@@ -55,7 +56,7 @@ def load_slide_image(
     )
 
 
-def calculate_st_slide_coordinates(
+def calculate_st_slide_coordinates(  # pragma: no cover
     splotch_data: SplotchInputData | SplotchResult,
     slide_image: Image.Image,
     count_file: str,  # noqa: ARG001
@@ -81,7 +82,7 @@ def calculate_st_slide_coordinates(
     return x, y
 
 
-def load_slide_coordinates_and_image(
+def load_slide_coordinates_and_image(  # pragma: no cover
     splotch_data: SplotchInputData | SplotchResult,
     count_file: str,
     scale_factor: float = 0.05,
@@ -196,7 +197,7 @@ def plot_rates_on_slides(
     for ax_idx, count_file in enumerate(count_files, start=1):
         ax = fig.add_subplot(num_rows, num_cols, ax_idx)
 
-        if "image_file" in splotch_result.metadata:
+        if "image_file" in splotch_result.metadata:  # pragma: no cover
             x, y, tissue_image = load_slide_coordinates_and_image(
                 splotch_result, count_file
             )
@@ -267,7 +268,7 @@ def plot_variable_on_slides(
     for ax_idx, count_file in enumerate(count_files, start=1):
         ax = fig.add_subplot(num_rows, num_cols, ax_idx)
 
-        if "image_file" in splotch_result.metadata:
+        if "image_file" in splotch_result.metadata:  # pragma: no cover
             x, y, tissue_image = load_slide_coordinates_and_image(
                 splotch_result, count_file
             )
@@ -426,7 +427,7 @@ def plot_annotations_on_slides(
     for ax_idx, count_file in enumerate(count_files, start=1):
         ax = fig.add_subplot(num_rows, num_cols, ax_idx)
 
-        if "image_file" in splotch_input_data.metadata:
+        if "image_file" in splotch_input_data.metadata:  # pragma: no cover
             x, y, tissue_image = load_slide_coordinates_and_image(
                 splotch_input_data, count_file
             )
@@ -495,7 +496,7 @@ def plot_tissue_sections_on_slides(
     for ax_idx, count_file in enumerate(count_files, start=1):
         ax = fig.add_subplot(num_rows, num_cols, ax_idx)
 
-        if "image_file" in splotch_input_data.metadata:
+        if "image_file" in splotch_input_data.metadata:  # pragma: no cover
             x, y, tissue_image = load_slide_coordinates_and_image(
                 splotch_input_data, count_file
             )

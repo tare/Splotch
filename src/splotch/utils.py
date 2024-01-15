@@ -196,6 +196,9 @@ def process_input_data(
 
     Returns:
         Splotch input data.
+
+    Raises:
+        ValueError if valid tissue sections are not found.
     """
     genes = list(counts_df.index)
 
@@ -227,6 +230,8 @@ def process_input_data(
 
         metadata = metadata_df[metadata_df.count_file == count_file][
             ["annotation_file", "image_file"]
+            if "image_file" in metadata_df.columns
+            else ["annotation_file"]
         ].iloc[0]
 
         count_file_spot_data = SpotData(
@@ -245,12 +250,6 @@ def process_input_data(
                 "%s has less than %d valid spots. Maybe coordinates do not match in the count and annotation files.",
                 count_file,
                 sum(indices),
-            )
-
-        if sum(indices) == 0:
-            logger.warning(
-                "%s has zero valid spots. Skip the count file.",
-                count_file,
             )
             continue
 
@@ -325,7 +324,12 @@ def process_input_data(
 
             tissue_section_idx += 1
 
-    level_df = pd.concat(level_dfs, axis=0)
+    try:
+        level_df = pd.concat(level_dfs, axis=0)
+    except ValueError as e:
+        msg = "No valid tissue sections found"
+        raise ValueError(msg) from e
+
     for level in ["level_1", "level_2", "level_3"][0:num_levels]:
         level_df[level] = level_df[level].astype("category")
 
@@ -355,7 +359,7 @@ def get_input_data(
     max_num_spots_per_tissue_section: int = 120,
     min_num_spots_per_tissue_section: int = 10,
     seed: int = 0,
-) -> SplotchInputData:
+) -> SplotchInputData:  # pragma: no cover
     """Get Splotch input data.
 
     This function is a wrapper for process_input_data(). It reads the metadata, count, and annotation files,

@@ -47,6 +47,7 @@ tox = "^4.11"
 ruff = "^0.1"
 mypy = "^1.6"
 pre-commit = "^3.5"
+pytest-cov = "^4.1"
 
 [tool.poetry.scripts]
 
@@ -118,10 +119,28 @@ convention = "google"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "-v"
+addopts = """\
+    -v \
+    --cov=splotch \
+    --cov=tests \
+    --cov-append \
+    --cov-report=term-missing \
+    --no-cov-on-fail \
+"""
 testpaths = [
     "tests",
 ]
+filterwarnings = [
+    "ignore:There are not enough devices to run parallel chains:UserWarning:luxglm.inference:",
+    "ignore:There are not enough devices to run parallel chains:UserWarning:test_luxglm:",
+]
+
+[tool.coverage.run]
+branch = true
+relative_files = true
+
+[tool.coverage.report]
+fail_under = 100
 
 [tool.mypy]
 python_version = "3.10"

@@ -141,6 +141,9 @@ def run_nuts(
         num_chains: Number of chains.
         priors: Prior distributions. Defaults to `splotch.models.get_default_priors()`.
         use_zero_inflated: Whether to use the zero-inflated Poisson likelihood. Defaults to False.
+
+    Returns:
+        SplotchResult object.
     """
 
     def get_model_kwargs(model_kwargs: dict[str, Any], counts: Array) -> dict[str, Any]:
@@ -284,7 +287,7 @@ def run_svi(
         use_zero_inflated: Whether to use the zero-inflated Poisson likelihood. Defaults to False.
 
     Returns:
-        MCMC object.
+        SplotchResult object.
     """
     guide = guide or AutoNormal(splotch_v1)
     optim = optim or Adam(step_size=0.1)
