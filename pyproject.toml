@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "splotch-st"
-version = "0.1.1a0"
+version = "1.0.0"
 description = "Splotch is a hierarchical generative probabilistic model for analyzing Spatial Transcriptomics (ST) data"
 authors = [
     "Tarmo Äijö <tarmo.aijo@gmail.com>",
