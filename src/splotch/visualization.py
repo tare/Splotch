@@ -1,9 +1,12 @@
 """visualization.py."""
+
+from collections.abc import Callable
 from math import ceil
-from typing import Callable
+from typing import TypeAlias
 
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
 from matplotlib.figure import Figure
 from PIL import Image
 
@@ -12,16 +15,14 @@ from splotch.dataclasses import SplotchInputData, SplotchResult
 # ruff: noqa: PLR0914
 
 
-LOAD_SLIDE_IMAGE_CALLABLE = Callable[
+LOAD_SLIDE_IMAGE_CALLABLE: TypeAlias = Callable[
     [SplotchInputData | SplotchResult, str], Image.Image
 ]
-CALCULATE_SLIDE_COORDINATES_CALLABLE = (
-    Callable[
-        [SplotchInputData | SplotchResult, Image.Image, str],
-        tuple[np.ndarray, np.ndarray],
-    ],
-)
-LOAD_SLIDE_COORDINATES_AND_IMAGE_CALLABLE = Callable[
+CALCULATE_SLIDE_COORDINATES_CALLABLE: TypeAlias = Callable[
+    [SplotchInputData | SplotchResult, Image.Image, str],
+    tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]],
+]
+LOAD_SLIDE_COORDINATES_AND_IMAGE_CALLABLE: TypeAlias = Callable[
     [
         SplotchInputData | SplotchResult,
         str,
@@ -29,7 +30,7 @@ LOAD_SLIDE_COORDINATES_AND_IMAGE_CALLABLE = Callable[
         LOAD_SLIDE_IMAGE_CALLABLE,
         CALCULATE_SLIDE_COORDINATES_CALLABLE,
     ],
-    tuple[np.ndarray, np.ndarray, Image.Image],
+    tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], Image.Image],
 ]
 
 
@@ -60,7 +61,7 @@ def calculate_st_slide_coordinates(  # pragma: no cover
     splotch_data: SplotchInputData | SplotchResult,
     slide_image: Image.Image,
     count_file: str,  # noqa: ARG001
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Calculate ST slide coordinates corresponding to image.
 
     Tested only using the old ST slides.
@@ -91,9 +92,9 @@ def load_slide_coordinates_and_image(  # pragma: no cover
     ] = load_slide_image,
     calculate_slide_coordinates: Callable[
         [SplotchInputData | SplotchResult, Image.Image, str],
-        tuple[np.ndarray, np.ndarray],
+        tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]],
     ] = calculate_st_slide_coordinates,
-) -> tuple[np.ndarray, np.ndarray, Image.Image]:
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], Image.Image]:
     """Get slide image and corresponding spot coordinates.
 
     Args:
@@ -200,7 +201,7 @@ def plot_rates_on_slides(
         if "image_file" in splotch_result.metadata:  # pragma: no cover
             x, y, tissue_image = load_slide_coordinates_and_image(
                 splotch_result, count_file
-            )
+            )  # type: ignore[call-arg]
 
             ax.imshow(tissue_image, origin="upper", interpolation="none", alpha=0.6)
         else:
@@ -271,7 +272,7 @@ def plot_variable_on_slides(
         if "image_file" in splotch_result.metadata:  # pragma: no cover
             x, y, tissue_image = load_slide_coordinates_and_image(
                 splotch_result, count_file
-            )
+            )  # type: ignore[call-arg]
 
             ax.imshow(tissue_image, origin="upper", interpolation="none", alpha=0.6)
         else:
@@ -430,7 +431,7 @@ def plot_annotations_on_slides(
         if "image_file" in splotch_input_data.metadata:  # pragma: no cover
             x, y, tissue_image = load_slide_coordinates_and_image(
                 splotch_input_data, count_file
-            )
+            )  # type: ignore[call-arg]
 
             ax.imshow(tissue_image, origin="upper", interpolation="none", alpha=0.6)
         else:
@@ -499,7 +500,7 @@ def plot_tissue_sections_on_slides(
         if "image_file" in splotch_input_data.metadata:  # pragma: no cover
             x, y, tissue_image = load_slide_coordinates_and_image(
                 splotch_input_data, count_file
-            )
+            )  # type: ignore[call-arg]
 
             ax.imshow(tissue_image, origin="upper", interpolation="none", alpha=0.6)
         else:

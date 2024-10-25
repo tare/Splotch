@@ -28,26 +28,29 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.10"
-numpyro = "^0.13.2"
+numpyro = "^0.15"
+jax = "<=0.4.30"
+jaxlib = "<=0.4.30"
 matplotlib = "^3.8.1"
 jupyterlab = {version = "^4.0.8", optional = true}
-scipy = "^1.11.3"
+scipy = "^1.14"
 ipywidgets = {version = "^8.1.1", optional = true}
-pandas = "^2.1.3"
-funsor = "^0.4.5"
-pillow = "^10.1.0"
-networkx = "^3.2.1"
+pandas = "^2"
+funsor = "^0.4"
+pillow = "^10.1"
+networkx = "^3.2"
 
 [tool.poetry.extras]
 examples = ["jupyterlab", "ipywidgets"]
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.4"
-tox = "^4.11"
-ruff = "^0.1"
-mypy = "^1.6"
-pre-commit = "^3.5"
-pytest-cov = "^4.1"
+nox = {extras = ["uv"], version = "^2024.10.9"}
+pre-commit = "^3.8"
+pytest = "^8.3"
+ruff = "^0.7"
+pytest-cov = "^5.0"
+mypy = "^1.11"
+ipykernel = "^6.29.5"
 
 [tool.poetry.scripts]
 
@@ -55,8 +58,13 @@ pytest-cov = "^4.1"
 "Bug Tracker" = "https://github.com/tare/Splotch/issues"
 
 [tool.ruff]
-target-version = "py38"
+target-version = "py310"
 fix = true
+exclude = ["LuxRep/"]
+force-exclude = true
+
+[tool.ruff.lint]
+preview = true
 fixable = [
     "I001",  # https://docs.astral.sh/ruff/rules/unsorted-imports/
 ]
@@ -71,45 +79,80 @@ select = [
     "N",  # https://docs.astral.sh/ruff/rules/#pep8-naming-n
     "D",  # https://docs.astral.sh/ruff/rules/#pydocstyle-d
     "UP",  # https://docs.astral.sh/ruff/rules/#pyupgrade-up
+    "YTT",  # https://docs.astral.sh/ruff/rules/#flake8-2020-ytt
     "ANN",  # https://docs.astral.sh/ruff/rules/#flake8-annotations-ann
-    "A",  # https://docs.astral.sh/ruff/rules/#flake8-builtins-a
+    "ASYNC",  # https://docs.astral.sh/ruff/rules/#flake8-async-async
+    "S",  # https://docs.astral.sh/ruff/rules/#flake8-bandit-s
+    "BLE",  # https://docs.astral.sh/ruff/rules/#flake8-blind-except-ble
+    "FBT",  # https://docs.astral.sh/ruff/rules/#flake8-boolean-trap-fbt
     "B",  # https://docs.astral.sh/ruff/rules/#flake8-bugbear-b
+    "A",  # https://docs.astral.sh/ruff/rules/#flake8-builtins-a
+    "COM",  # https://docs.astral.sh/ruff/rules/#flake8-commas-com
+    # "CPY",  # https://docs.astral.sh/ruff/rules/#flake8-copyright-cpy
     "C4",  # https://docs.astral.sh/ruff/rules/#flake8-comprehensions-c4
-    "EM101",  # https://docs.astral.sh/ruff/rules/#flake8-errmsg-em
+    "DTZ",  # https://docs.astral.sh/ruff/rules/#flake8-datetimez-dtz
+    "T10",  # https://docs.astral.sh/ruff/rules/#flake8-debugger-t10
+    "DJ",  # https://docs.astral.sh/ruff/rules/#flake8-django-dj
+    "EM",  # https://docs.astral.sh/ruff/rules/#flake8-errmsg-em
     "EXE",  # https://docs.astral.sh/ruff/rules/#flake8-executable-exe
+    "FA",  # https://docs.astral.sh/ruff/rules/#flake8-future-annotations-fa
     "ISC",  # https://docs.astral.sh/ruff/rules/#flake8-implicit-str-concat-isc
+    "ICN",  # https://docs.astral.sh/ruff/rules/#flake8-import-conventions-icn
+    "LOG",  # https://docs.astral.sh/ruff/rules/#flake8-logging-log
     "G",  # https://docs.astral.sh/ruff/rules/#flake8-logging-format-g
+    "INP",  # https://docs.astral.sh/ruff/rules/#flake8-no-pep420-inp
     "PIE",  # https://docs.astral.sh/ruff/rules/#flake8-pie-pie
+    "T20",  # https://docs.astral.sh/ruff/rules/#flake8-print-t20
+    "PYI",  # https://docs.astral.sh/ruff/rules/#flake8-pyi-pyi
     "PT",  # https://docs.astral.sh/ruff/rules/#flake8-pytest-style-pt
     "Q",  # https://docs.astral.sh/ruff/rules/#flake8-quotes-q
+    "RSE",  # https://docs.astral.sh/ruff/rules/#flake8-raise-rse
     "RET",  # https://docs.astral.sh/ruff/rules/#flake8-return-ret
     "SLF",  # https://docs.astral.sh/ruff/rules/#flake8-self-slf
+    "SLOT",  # https://docs.astral.sh/ruff/rules/#flake8-slots-slot
     "SIM",  # https://docs.astral.sh/ruff/rules/#flake8-simplify-sim
     "TID",  # https://docs.astral.sh/ruff/rules/#flake8-tidy-imports-tid
+    "TCH",  # https://docs.astral.sh/ruff/rules/#flake8-type-checking-tch
+    "INT",  # https://docs.astral.sh/ruff/rules/#flake8-gettext-int
     "ARG",  # https://docs.astral.sh/ruff/rules/#flake8-unused-arguments-arg
     "PTH",  # https://docs.astral.sh/ruff/rules/#flake8-use-pathlib-pth
-    "TD",  # https://docs.astral.sh/ruff/rules/#flake8-todos-td
+    # "TD",  # https://docs.astral.sh/ruff/rules/#flake8-todos-td
+    # "FIX",  # https://docs.astral.sh/ruff/rules/#flake8-fixme-fix
     "ERA",  # https://docs.astral.sh/ruff/rules/#eradicate-era
+    "PD",  # https://docs.astral.sh/ruff/rules/#pandas-vet-pd
     "PGH",  # https://docs.astral.sh/ruff/rules/#pygrep-hooks-pgh
     "PL",  # https://docs.astral.sh/ruff/rules/#pylint-pl
     "TRY",  # https://docs.astral.sh/ruff/rules/#tryceratops-try
+    "FLY",  # https://docs.astral.sh/ruff/rules/#flynt-fly
     "NPY",  # https://docs.astral.sh/ruff/rules/#numpy-specific-rules-npy
+    "FAST",  # https://docs.astral.sh/ruff/rules/#fastapi-fast
+    "AIR",  # https://docs.astral.sh/ruff/rules/#airflow-air
     "PERF",  # https://docs.astral.sh/ruff/rules/#perflint-perf
     "FURB",  # https://docs.astral.sh/ruff/rules/#refurb-furb
-    "LOG",  # https://docs.astral.sh/ruff/rules/#flake8-logging-log
+    "DOC",  # https://docs.astral.sh/ruff/rules/#pydoclint-doc
     "RUF",  # https://docs.astral.sh/ruff/rules/#ruff-specific-rules-ruf
 ]
 ignore = [
-    "ANN101",  # https://docs.astral.sh/ruff/rules/missing-type-self/
-    "ISC001",  # https://docs.astral.sh/ruff/rules/#flake8-implicit-str-concat-isc
+    "ANN101",  # https://docs.astral.sh/ruff/rules/missing-type-function-argument/
+    "S101",  # https://docs.astral.sh/ruff/rules/assert/
     "UP034",  # https://docs.astral.sh/ruff/rules/extraneous-parentheses/
+    "PD002",  # https://docs.astral.sh/ruff/rules/pandas-use-of-inplace-argument/
+    # https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
+    "W191",  # https://docs.astral.sh/ruff/rules/tab-indentation/
+    "E111",  # https://docs.astral.sh/ruff/rules/indentation-with-invalid-multiple/
+    "E114",  # https://docs.astral.sh/ruff/rules/indentation-with-invalid-multiple-comment/
+    "E117",  # https://docs.astral.sh/ruff/rules/over-indented/
+    "D206",  # https://docs.astral.sh/ruff/rules/indent-with-spaces/
+    "D300",  # https://docs.astral.sh/ruff/rules/triple-single-quotes/
+    "Q000",  # https://docs.astral.sh/ruff/rules/bad-quotes-inline-string/
+    "Q001",  # https://docs.astral.sh/ruff/rules/bad-quotes-multiline-string/
+    "Q002",  # https://docs.astral.sh/ruff/rules/bad-quotes-docstring/
+    "Q003",  # https://docs.astral.sh/ruff/rules/avoidable-escaped-quote/
+    "COM812",  # https://docs.astral.sh/ruff/rules/missing-trailing-comma/
+    "COM819",  # https://docs.astral.sh/ruff/rules/prohibited-trailing-comma/
+    "ISC001",  # https://docs.astral.sh/ruff/rules/single-line-implicit-string-concatenation/
+    "ISC002",  # https://docs.astral.sh/ruff/rules/multi-line-implicit-string-concatenation/
 ]
-
-[tool.ruff.lint]
-preview = true
-
-[tool.ruff.lint.pylint]
-max-args = 10
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
@@ -117,13 +160,25 @@ max-complexity = 10
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
+[tool.ruff.lint.pylint]
+max-args = 10
+
+[tool.ruff.lint.flake8-builtins]
+builtins-allowed-modules = ["dataclasses"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.uv]
+reinstall-package = ["splotch-st"]
+
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = """\
     -v \
+    --cov-config=pyproject.toml \
     --cov=splotch \
     --cov=tests \
-    --cov-append \
     --cov-report=term-missing \
     --no-cov-on-fail \
 """
@@ -131,8 +186,7 @@ testpaths = [
     "tests",
 ]
 filterwarnings = [
-    "ignore:There are not enough devices to run parallel chains:UserWarning:luxglm.inference:",
-    "ignore:There are not enough devices to run parallel chains:UserWarning:test_luxglm:",
+    "ignore:There are not enough devices to run parallel chains",
 ]
 
 [tool.coverage.run]

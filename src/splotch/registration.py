@@ -2,9 +2,11 @@
 
 import logging
 from functools import partial
+from typing import TypeAlias
 
 import jax.numpy as jnp
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 from jax import Array, grad, jit, random
 from jax.example_libraries.optimizers import OptimizerState, adagrad
@@ -13,7 +15,7 @@ from splotch.dataclasses import SplotchInputData
 
 logger = logging.getLogger(__name__)
 
-KeyArray = Array
+KeyArray: TypeAlias = Array
 
 
 def register(
@@ -50,12 +52,12 @@ def register(
     )
 
     coordinates = [
-        coordinates_df.loc[pd.IndexSlice[:, tissue_section, :], :].values
+        coordinates_df.loc[pd.IndexSlice[:, tissue_section, :], :].to_numpy()
         for tissue_section in unique_tissue_sections
     ]
     annotations = np.hstack(
         [
-            annotations_df.loc[pd.IndexSlice[:, tissue_section, :]].values
+            annotations_df.loc[pd.IndexSlice[:, tissue_section, :]].to_numpy()
             for tissue_section in unique_tissue_sections
         ]
     )
@@ -80,11 +82,11 @@ def register(
 
 def register_tissue_sections(
     key: KeyArray,
-    x: list[np.ndarray],
-    y: np.ndarray,
+    x: list[npt.NDArray[np.float64]],
+    y: npt.NDArray[np.int64],
     num_steps: int,
     aars_of_interest: list[int],
-) -> np.ndarray:
+) -> npt.NDArray[np.float64]:
     """Registed individual tissue sections.
 
     Args:
@@ -100,7 +102,7 @@ def register_tissue_sections(
     aar_indices = [np.where(y == aar)[0] for aar in aars_of_interest]
     uti_indices = [np.triu_indices(np.sum(y == aar), k=1) for aar in aars_of_interest]
 
-    def transform(param: Array, x: list[np.ndarray]) -> Array:
+    def transform(param: Array, x: list[npt.NDArray[np.float64]]) -> Array:
         theta_params = param[0, :]
         delta_params = params[1:, :].T
         return jnp.hstack(
@@ -115,13 +117,17 @@ def register_tissue_sections(
                     point.T,
                 )
                 + delta[:, None]
-                for theta, delta, point in zip(theta_params, delta_params, x)
+                for theta, delta, point in zip(
+                    theta_params, delta_params, x, strict=True
+                )
             ]
         ).T
 
-    def f(param: Array, x: list[np.ndarray]) -> Array:
+    def f(param: Array, x: list[npt.NDArray[np.float64]]) -> Array:
         def loss(x: Array) -> Array:
-            def helper(x: Array, uti: tuple[np.ndarray, np.ndarray]) -> Array:
+            def helper(
+                x: Array, uti: tuple[npt.NDArray[np.int64], npt.NDArray[np.int64]]
+            ) -> Array:
                 dr = x[uti[0], :] - x[uti[1], :]
                 return jnp.sum(jnp.sqrt(jnp.sum(dr * dr, axis=1)))
 
@@ -175,8 +181,8 @@ def register_tissue_sections(
 
 
 def register_consensus(
-    x: np.ndarray, y: np.ndarray, aars_of_interest: list[int]
-) -> np.ndarray:
+    x: npt.NDArray[np.float64], y: npt.NDArray[np.int64], aars_of_interest: list[int]
+) -> npt.NDArray[np.float64]:
     """Register consensus point cloud.
 
     Args:
@@ -188,7 +194,7 @@ def register_consensus(
         Registered coordinates.
     """
 
-    def rotate(theta: float, x: np.ndarray) -> np.ndarray:
+    def rotate(theta: float, x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         """Rotate points.
 
         Args:
@@ -198,7 +204,7 @@ def register_consensus(
         Returns:
             Rotated points.
         """
-        return np.dot(  # type: ignore[no-any-return]
+        return np.dot(
             np.asarray(
                 [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]
             ),
@@ -214,4 +220,4 @@ def register_consensus(
     theta = values[np.argmax(values[:, 0]), 1]
 
     x_registered = rotate(-theta, x)
-    return x_registered - np.mean(x_registered, 0, keepdims=True)  # type: ignore[no-any-return]
+    return x_registered - np.mean(x_registered, 0, keepdims=True)

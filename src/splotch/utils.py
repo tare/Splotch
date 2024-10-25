@@ -1,12 +1,15 @@
 """utils.py."""
+
 import functools
 import logging
 import operator
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import scipy.stats as st
 from jax import Array
@@ -36,7 +39,7 @@ def read_count_files(count_files: list[str], min_detection_rate: float) -> pd.Da
         pd.read_table(filename, header=0, index_col=0) for filename in count_files
     ]
 
-    for filename, count_df in zip(count_files, counts_dfs):
+    for filename, count_df in zip(count_files, counts_dfs, strict=True):
         count_df.columns = pd.MultiIndex.from_product(
             [[filename], count_df.columns], names=["file", "coordinate"]
         )
@@ -70,13 +73,17 @@ def read_annotation_files(annotation_files: list[str]) -> pd.DataFrame:
 
     Returns:
         Dataframe containing annotations.
+
+    Raises:
+        ValueError: Annotation value is not 0 or 1.
+        ValueError: Spot does not have zero or one active category.
     """
     logger.info("Reading %d annotation files", len(annotation_files))
     annotation_dfs = [
         pd.read_table(filename, header=0, index_col=0) for filename in annotation_files
     ]
 
-    for filename, annotation_df in zip(annotation_files, annotation_dfs):
+    for filename, annotation_df in zip(annotation_files, annotation_dfs, strict=True):
         annotation_df.columns = pd.MultiIndex.from_product(
             [[filename], annotation_df.columns], names=["file", "coordinate"]
         )
@@ -87,7 +94,7 @@ def read_annotation_files(annotation_files: list[str]) -> pd.DataFrame:
     if not np.all(np.isin(annotation_df.values, [0, 1])):
         msg = "All annotation values should be 0 or 1"
         raise ValueError(msg)
-    if not np.all(np.isin(annotation_df.values.sum(0), [0, 1])):
+    if not np.all(np.isin(annotation_df.to_numpy().sum(0), [0, 1])):
         msg = "Each spot should have zero or one active category"
         raise ValueError(msg)
     return annotation_df
@@ -168,9 +175,10 @@ def process_input_data(
     min_total_count: int = 100,
     min_num_spots_per_slide: int = 10,
     num_of_neighbors: int = 8,
-    separate_overlapping_tissue_sections: bool = True,
     max_num_spots_per_tissue_section: int = 120,
     min_num_spots_per_tissue_section: int = 10,
+    *,
+    separate_overlapping_tissue_sections: bool = True,
     seed: int = 0,
 ) -> SplotchInputData:
     """Process input data.
@@ -186,19 +194,19 @@ def process_input_data(
             Slides with less than this many spots are discarded. Defaults to 10.
         num_of_neighbors: Number of neighbors to be considered in the tissue section detection and separation.
             Defaults to 8.
-        separate_overlapping_tissue_sections: Whether to separate overlapping tissue sections. Defaults to True.
         max_num_spots_per_tissue_section: Maximum number of spots per tissue sections.
             Tissue sections with more than this many spots are assumed to be overlapping.
             Only used when `separate_overlapping_tissue_section = True`. Defaults to 120.
         min_num_spots_per_tissue_section: Minimum number of spots per tissue sections.
             Tissue section with less than this many spots are discarded. Defaults to 10.
+        separate_overlapping_tissue_sections: Whether to separate overlapping tissue sections. Defaults to True.
         seed: Random seed. This is used to initialize the tissue section separation.
+
+    Raises:
+        ValueError: Valid tissue sections are not found.
 
     Returns:
         Splotch input data.
-
-    Raises:
-        ValueError if valid tissue sections are not found.
     """
     genes = list(counts_df.index)
 
@@ -217,7 +225,7 @@ def process_input_data(
         logger.info("Processing %s", count_file)
 
         coordinates_orig = np.asarray(list(counts_df[count_file].columns))
-        spot_counts = counts_df[count_file].values.T
+        spot_counts = counts_df[count_file].to_numpy().T
 
         annotation_file = metadata_df[metadata_df.count_file == count_file][
             "annotation_file"
@@ -355,9 +363,10 @@ def get_input_data(
     min_total_count: int = 100,
     min_num_spots_per_slide: int = 10,
     num_of_neighbors: int = 8,
-    separate_overlapping_tissue_sections: bool = False,
     max_num_spots_per_tissue_section: int = 120,
     min_num_spots_per_tissue_section: int = 10,
+    *,
+    separate_overlapping_tissue_sections: bool = False,
     seed: int = 0,
 ) -> SplotchInputData:  # pragma: no cover
     """Get Splotch input data.
@@ -376,13 +385,17 @@ def get_input_data(
             Slides with less than this many spots are discarded. Defaults to 10.
         num_of_neighbors: Number of neighbors to be considered in the tissue section detection and separation.
             Defaults to 8.
-        separate_overlapping_tissue_sections: Whether to separate overlapping tissue sections. Defaults to True.
         max_num_spots_per_tissue_section: Maximum number of spots per tissue sections.
             Tissue sections with more than this many spots are assumed to be overlapping.
             Only used when `separate_overlapping_tissue_section = True`. Defaults to 120.
         min_num_spots_per_tissue_section: TBA. Minimum number of spots per tissue sections.
             Tissue section with less than this many spots are discarded. Defaults to 10.
+        separate_overlapping_tissue_sections: Whether to separate overlapping tissue sections. Defaults to True.
         seed: Random seed. This is used to initialize the tissue section separation.
+
+    Raises:
+        ValueError: num_levels not in {1, 2, 3}.
+        ValueError: Provided count files are not unique.
 
     Returns:
         Splotch input data.
@@ -409,16 +422,16 @@ def get_input_data(
         min_total_count,
         min_num_spots_per_slide,
         num_of_neighbors,
-        separate_overlapping_tissue_sections,
         max_num_spots_per_tissue_section,
         min_num_spots_per_tissue_section,
-        seed,
+        separate_overlapping_tissue_sections=separate_overlapping_tissue_sections,
+        seed=seed,
     )
 
 
 def savagedickey(
-    theta_1: np.ndarray,
-    theta_2: np.ndarray,
+    theta_1: npt.NDArray[np.float64],
+    theta_2: npt.NDArray[np.float64],
     mu_1: float = 0.0,
     sigma_1: float = 2.0,
     mu_2: float = 0.0,
@@ -449,8 +462,8 @@ def savagedickey(
 
 
 def get_spot_adjacency_matrix(
-    coordinates: np.ndarray, num_of_neighbors: int
-) -> np.ndarray:
+    coordinates: npt.NDArray[np.float64], num_of_neighbors: int
+) -> npt.NDArray[np.bool]:
     """Get spot adjacency matrix.
 
     num_of_neighbors has to be between 1 and number of coordinates - 2.
@@ -463,7 +476,7 @@ def get_spot_adjacency_matrix(
         Adjacency matrix. Self-loops are not considered.
 
     Raises:
-        ValueError if num_of_neighbors is outside of the reasonable range.
+        ValueError: num_of_neighbors is outside of the reasonable range.
     """
     if num_of_neighbors < 1 or num_of_neighbors + 1 >= len(coordinates):
         msg = "num_of_neighbors has to be between 1 and len(coordinates) - 2."
@@ -473,13 +486,13 @@ def get_spot_adjacency_matrix(
     threshold = np.min(
         np.sort(coordinates_distance_matrix, axis=0)[num_of_neighbors + 1, :]
     )
-    return np.logical_and(  # type: ignore[no-any-return]
+    return np.logical_and(
         coordinates_distance_matrix < threshold, coordinates_distance_matrix > 0
     )
 
 
 def detect_tissue_sections(
-    coordinates: np.ndarray,
+    coordinates: npt.NDArray[np.float64],
     num_of_neighbors: int,
 ) -> list[set[int]]:
     """Detect tissue sections.
@@ -504,7 +517,7 @@ def detect_tissue_sections(
 
 
 def separate_tissue_sections(
-    coordinates: np.ndarray,
+    coordinates: npt.NDArray[np.float64],
     tissue_sections: list[set[int]],
     num_of_neighbors: int,
     max_num_spots_per_tissue_section: int,
@@ -523,7 +536,7 @@ def separate_tissue_sections(
             Tissue sections with more than this many spots are assumed to be overlapping.
         seed: Random seed. This is used to initialize the tissue section separation.
 
-    Return:
+    Returns:
         Spot indices grouped by separated tissue sections.
     """
     adjacency_matrix = get_spot_adjacency_matrix(coordinates, num_of_neighbors)
@@ -553,7 +566,7 @@ def separate_tissue_sections(
 
 def separate_tissue_section(
     tissue_section: set[int],
-    adjacency_matrix: np.ndarray,
+    adjacency_matrix: npt.NDArray[np.bool],
     seed: int = 0,
 ) -> list[set[int]]:
     """Separate overlapping tissue sections.
@@ -593,7 +606,11 @@ def get_mcmc_summary(posterior_samples: Array) -> pd.DataFrame:
         DataFrame containing diagnostics of posterior samples.
     """
 
-    def process_variable(data: Mapping[str, np.ndarray | np.float64]) -> dict[str, Any]:
+    def process_variable(
+        data: Mapping[
+            str, npt.NDArray[np.float32 | np.float64] | np.float32 | np.float64
+        ],
+    ) -> dict[str, Any]:
         res: dict[str, Any] = {}
         for statistic, values in data.items():
             if "index" not in res:
@@ -601,7 +618,8 @@ def get_mcmc_summary(posterior_samples: Array) -> pd.DataFrame:
                     res["index"] = [
                         tuple(map(int, x))
                         for x in zip(
-                            *jnp.unravel_index(jnp.arange(values.size), values.shape)
+                            *jnp.unravel_index(jnp.arange(values.size), values.shape),
+                            strict=True,
                         )
                     ]
                 else:

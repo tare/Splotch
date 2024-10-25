@@ -1,16 +1,20 @@
 """test_splotch.py."""
+
 import os
 import re
 from io import BytesIO
+from typing import Literal
 
 import jax.numpy as jnp
-import matplotlib
+import matplotlib as mpl
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import pytest
 import scipy.stats
-from jax import random
+from jax import Array, random
 from matplotlib.figure import Figure
+
 from splotch.inference import get_splotch_kwargs, run_nuts, run_svi
 from splotch.models import get_default_priors, splotch_v1
 from splotch.registration import register
@@ -36,15 +40,19 @@ from splotch.visualization import (
     plot_variable_on_slides,
 )
 
-matplotlib.use("Agg")
+mpl.use("Agg")
 
 # this is needed for the tests using pmap
 os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"
 
 
 @pytest.fixture(scope="session")
-def separated_tissue_sections_square_grid() -> np.ndarray:
-    """Separated tissue sections on square grid."""
+def separated_tissue_sections_square_grid() -> npt.NDArray[np.float64]:
+    """Separated tissue sections on square grid.
+
+    Returns:
+        Coordinates.
+    """
     num_spots_per_tissue_section = 5**2
     x1, y1 = (
         np.tile(
@@ -74,12 +82,16 @@ def separated_tissue_sections_square_grid() -> np.ndarray:
             np.stack((x2.flatten(), y2.flatten())).T,
         )
     )
-    return coordinates + 0.2 * np.random.default_rng(0).uniform(size=coordinates.shape)  # type: ignore[no-any-return]
+    return coordinates + 0.2 * np.random.default_rng(0).uniform(size=coordinates.shape)
 
 
 @pytest.fixture(scope="session")
-def overlapping_tissue_sections_square_grid() -> np.ndarray:
-    """Overlapping tissue sections on square grid."""
+def overlapping_tissue_sections_square_grid() -> npt.NDArray[np.float64]:
+    """Overlapping tissue sections on square grid.
+
+    Returns:
+        Coordinates.
+    """
     num_spots_per_tissue_section = 5**2
     x1, y1 = (
         np.tile(
@@ -110,12 +122,16 @@ def overlapping_tissue_sections_square_grid() -> np.ndarray:
             np.asarray([[5, 1], [5, 2], [5, 3]]),
         )
     )
-    return coordinates + 0.2 * np.random.default_rng(0).uniform(size=coordinates.shape)  # type: ignore[no-any-return]
+    return coordinates + 0.2 * np.random.default_rng(0).uniform(size=coordinates.shape)
 
 
 @pytest.fixture(scope="session")
-def separated_tissue_sections_hexagonal_grid() -> np.ndarray:
-    """Separated tissue sections on hexagonal grid."""
+def separated_tissue_sections_hexagonal_grid() -> npt.NDArray[np.float64]:
+    """Separated tissue sections on hexagonal grid.
+
+    Returns:
+        Coordinates.
+    """
     num_spots_per_tissue_section = 5**2
     x1, y1 = (
         np.tile(
@@ -129,7 +145,7 @@ def separated_tissue_sections_hexagonal_grid() -> np.ndarray:
             (int(np.sqrt(num_spots_per_tissue_section)), 1),
         ),
     )
-    x1 = x1 + (np.arange(int(np.sqrt(num_spots_per_tissue_section))) % 2)[None, :]
+    x1 += (np.arange(int(np.sqrt(num_spots_per_tissue_section))) % 2)[None, :]
     x2, y2 = (
         int(np.sqrt(num_spots_per_tissue_section))
         + 1
@@ -156,12 +172,16 @@ def separated_tissue_sections_hexagonal_grid() -> np.ndarray:
             np.stack((x2.flatten(), y2.flatten())).T,
         )
     )
-    return coordinates + 0.2 * np.random.default_rng(0).uniform(size=coordinates.shape)  # type: ignore[no-any-return]
+    return coordinates + 0.2 * np.random.default_rng(0).uniform(size=coordinates.shape)
 
 
 @pytest.fixture(scope="session")
-def overlapping_tissue_sections_hexagonal_grid() -> np.ndarray:
-    """Overlapping tissue sections on hexagonal grid."""
+def overlapping_tissue_sections_hexagonal_grid() -> npt.NDArray[np.float64]:
+    """Overlapping tissue sections on hexagonal grid.
+
+    Returns:
+        Coordinates.
+    """
     num_spots_per_tissue_section = 5**2
     x1, y1 = (
         np.tile(
@@ -175,7 +195,7 @@ def overlapping_tissue_sections_hexagonal_grid() -> np.ndarray:
             (int(np.sqrt(num_spots_per_tissue_section)), 1),
         ),
     )
-    x1 = x1 + (np.arange(int(np.sqrt(num_spots_per_tissue_section))) % 2)[None, :]
+    x1 += (np.arange(int(np.sqrt(num_spots_per_tissue_section))) % 2)[None, :]
     x2, y2 = (
         int(np.sqrt(num_spots_per_tissue_section))
         + 1
@@ -203,12 +223,16 @@ def overlapping_tissue_sections_hexagonal_grid() -> np.ndarray:
             np.asarray([[10, 2], [11, 3], [11, 1]]),
         )
     )
-    return coordinates + 0.2 * np.random.default_rng(0).uniform(size=coordinates.shape)  # type: ignore[no-any-return]
+    return coordinates + 0.2 * np.random.default_rng(0).uniform(size=coordinates.shape)
 
 
-@pytest.fixture()
+@pytest.fixture
 def count_files() -> tuple[BytesIO, BytesIO]:
-    """Two count files."""
+    """Two count files.
+
+    Returns:
+        Two binary streams representing count files.
+    """
     b1 = BytesIO()
     pd.DataFrame(
         {"12_10": [1, 2, 3, 4, 5], "13_5": [1, 1, 1, 1, 1], "2_2": [0, 1, 1, 1, 1]},
@@ -225,9 +249,13 @@ def count_files() -> tuple[BytesIO, BytesIO]:
     return (b1, b2)
 
 
-@pytest.fixture()
+@pytest.fixture
 def annotation_files() -> tuple[BytesIO, BytesIO]:
-    """Two annotation files."""
+    """Two annotation files.
+
+    Returns:
+        Two binary streams representing annotation files.
+    """
     b1 = BytesIO()
     pd.DataFrame(
         {"12_10": [1, 0, 0], "13_5": [0, 1, 0], "2_2": [0, 0, 1]},
@@ -244,9 +272,13 @@ def annotation_files() -> tuple[BytesIO, BytesIO]:
     return (b1, b2)
 
 
-@pytest.fixture()
+@pytest.fixture
 def annotation_files_invalid_1() -> tuple[BytesIO, BytesIO]:
-    """Two invalid annotation files (invalid value)."""
+    """Two invalid annotation files (invalid value).
+
+    Returns:
+        Two binary streams representing annotation files.
+    """
     b1 = BytesIO()
     pd.DataFrame(
         {"12_10": [2, 0, 0], "13_5": [0, 1, 0], "2_2": [0, 0, 1]},
@@ -263,9 +295,13 @@ def annotation_files_invalid_1() -> tuple[BytesIO, BytesIO]:
     return (b1, b2)
 
 
-@pytest.fixture()
+@pytest.fixture
 def annotation_files_invalid_2() -> tuple[BytesIO, BytesIO]:
-    """Two invalid annotation files (multiple active categories)."""
+    """Two invalid annotation files (multiple active categories).
+
+    Returns:
+        Two binary streams representing annotation files.
+    """
     b1 = BytesIO()
     pd.DataFrame(
         {"12_10": [1, 0, 0], "13_5": [0, 1, 0], "2_2": [0, 0, 1]},
@@ -282,9 +318,22 @@ def annotation_files_invalid_2() -> tuple[BytesIO, BytesIO]:
     return (b1, b2)
 
 
-@pytest.fixture()
-def spot_data() -> pd.DataFrame:
-    """Spot data."""
+@pytest.fixture
+def spot_data() -> (
+    tuple[
+        npt.NDArray[np.bytes_],
+        pd.Series,
+        pd.Series,
+        npt.NDArray[np.bytes_],
+        npt.NDArray[np.int64],
+        pd.DataFrame,
+    ]
+):
+    """Spot data.
+
+    Returns:
+        Tuple containing genes, level values, metadata, coordinates, spot counts, and annotations.
+    """
     genes = np.asarray(["g1", "g2"])
     level_values = pd.Series({"level_1": "a"})
     metadata = pd.Series({"annotation_file": "file.tsv", "image_file": "image.jpg"})
@@ -304,11 +353,23 @@ def spot_data() -> pd.DataFrame:
     return genes, level_values, metadata, coordinates_orig, spot_counts, annotations_df
 
 
-@pytest.fixture()
-def spot_data_invalid_1() -> pd.DataFrame:
+@pytest.fixture
+def spot_data_invalid_1() -> (
+    tuple[
+        npt.NDArray[np.bytes_],
+        pd.Series,
+        pd.Series,
+        npt.NDArray[np.bytes_],
+        npt.NDArray[np.int64],
+        pd.DataFrame,
+    ]
+):
     """Invalid spot data.
 
     Coordinates do not following the required naming schema.
+
+    Returns:
+        Tuple containing genes, level values, metadata, coordinates, spot counts, and annotations.
     """
     genes = np.asarray(["g1", "g2"])
     level_values = pd.Series({"level_1": "a"})
@@ -329,11 +390,23 @@ def spot_data_invalid_1() -> pd.DataFrame:
     return genes, level_values, metadata, coordinates_orig, spot_counts, annotations_df
 
 
-@pytest.fixture()
-def spot_data_invalid_2() -> pd.DataFrame:
+@pytest.fixture
+def spot_data_invalid_2() -> (
+    tuple[
+        npt.NDArray[np.bytes_],
+        pd.Series,
+        pd.Series,
+        npt.NDArray[np.bytes_],
+        npt.NDArray[np.int64],
+        pd.DataFrame,
+    ]
+):
     """Spot data.
 
     Number of genes do not match.
+
+    Returns:
+        Tuple containing genes, level values, metadata, coordinates, spot counts, and annotations.
     """
     genes = np.asarray(["g1", "g2", "g3"])
     level_values = pd.Series({"level_1": "a"})
@@ -354,11 +427,23 @@ def spot_data_invalid_2() -> pd.DataFrame:
     return genes, level_values, metadata, coordinates_orig, spot_counts, annotations_df
 
 
-@pytest.fixture()
-def spot_data_invalid_3() -> pd.DataFrame:
+@pytest.fixture
+def spot_data_invalid_3() -> (
+    tuple[
+        npt.NDArray[np.bytes_],
+        pd.Series,
+        pd.Series,
+        npt.NDArray[np.bytes_],
+        npt.NDArray[np.int64],
+        pd.DataFrame,
+    ]
+):
     """Spot data.
 
     Number of coordinates do not match.
+
+    Returns:
+        Tuple containing genes, level values, metadata, coordinates, spot counts, and annotations.
     """
     genes = np.asarray(["g1", "g2"])
     level_values = pd.Series({"level_1": "a"})
@@ -379,11 +464,15 @@ def spot_data_invalid_3() -> pd.DataFrame:
     return genes, level_values, metadata, coordinates_orig, spot_counts, annotations_df
 
 
-@pytest.fixture()
+@pytest.fixture
 def splotchinputdata() -> (
     tuple[SplotchInputData, pd.DataFrame, pd.DataFrame, pd.DataFrame]
 ):
-    """SplotchInputData."""
+    """SplotchInputData.
+
+    Returns:
+        Tuple containing splotch input data, metadata, counts, and annotations.
+    """
     count_files = ["count_file_1.tsv", "count_file_2.tsv"]
     annotation_files = ["annotation_file_1.tsv", "annotation_file_2.tsv"]
 
@@ -406,7 +495,7 @@ def splotchinputdata() -> (
         ),
     ]
 
-    for filename, count_df in zip(count_files, counts_dfs):
+    for filename, count_df in zip(count_files, counts_dfs, strict=True):
         count_df.columns = pd.MultiIndex.from_product(
             [[filename], count_df.columns], names=["file", "coordinate"]
         )
@@ -425,7 +514,7 @@ def splotchinputdata() -> (
         ),
     ]
 
-    for filename, annotation_df in zip(annotation_files, annotation_dfs):
+    for filename, annotation_df in zip(annotation_files, annotation_dfs, strict=True):
         annotation_df.columns = pd.MultiIndex.from_product(
             [[filename], annotation_df.columns], names=["file", "coordinate"]
         )
@@ -448,11 +537,13 @@ def splotchinputdata() -> (
     return splotch_input_data, metadata_df, counts_df, annotations_df
 
 
-@pytest.fixture()
-def splotchinputdata_low_coverage() -> (
-    tuple[SplotchInputData, pd.DataFrame, pd.DataFrame, pd.DataFrame]
-):
-    """SplotchInputData."""
+@pytest.fixture
+def splotchinputdata_low_coverage() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """SplotchInputData.
+
+    Returns:
+        Tuple containing metadata, counts, and annotations.
+    """
     count_files = ["count_file_1.tsv", "count_file_2.tsv"]
     annotation_files = ["annotation_file_1.tsv", "annotation_file_2.tsv"]
 
@@ -475,7 +566,7 @@ def splotchinputdata_low_coverage() -> (
         ),
     ]
 
-    for filename, count_df in zip(count_files, counts_dfs):
+    for filename, count_df in zip(count_files, counts_dfs, strict=True):
         count_df.columns = pd.MultiIndex.from_product(
             [[filename], count_df.columns], names=["file", "coordinate"]
         )
@@ -494,7 +585,7 @@ def splotchinputdata_low_coverage() -> (
         ),
     ]
 
-    for filename, annotation_df in zip(annotation_files, annotation_dfs):
+    for filename, annotation_df in zip(annotation_files, annotation_dfs, strict=True):
         annotation_df.columns = pd.MultiIndex.from_product(
             [[filename], annotation_df.columns], names=["file", "coordinate"]
         )
@@ -505,9 +596,13 @@ def splotchinputdata_low_coverage() -> (
     return metadata_df, counts_df, annotations_df
 
 
-@pytest.fixture()
+@pytest.fixture
 def splotchinputdata_registration() -> SplotchInputData:
-    """SplotchInputData."""
+    """SplotchInputData.
+
+    Returns:
+        Processed input data.
+    """
     count_files = ["count_file_1.tsv", "count_file_2.tsv"]
     annotation_files = ["annotation_file_1.tsv", "annotation_file_2.tsv"]
 
@@ -539,7 +634,7 @@ def splotchinputdata_registration() -> SplotchInputData:
         ),
     ]
 
-    for filename, count_df in zip(count_files, counts_dfs):
+    for filename, count_df in zip(count_files, counts_dfs, strict=True):
         count_df.columns = pd.MultiIndex.from_product(
             [[filename], count_df.columns], names=["file", "coordinate"]
         )
@@ -567,7 +662,7 @@ def splotchinputdata_registration() -> SplotchInputData:
         ),
     ]
 
-    for filename, annotation_df in zip(annotation_files, annotation_dfs):
+    for filename, annotation_df in zip(annotation_files, annotation_dfs, strict=True):
         annotation_df.columns = pd.MultiIndex.from_product(
             [[filename], annotation_df.columns], names=["file", "coordinate"]
         )
@@ -588,9 +683,13 @@ def splotchinputdata_registration() -> SplotchInputData:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def splotchinputdata_inference() -> SplotchInputData:
-    """SplotchInputData."""
+    """SplotchInputData.
+
+    Returns:
+        Processed input data.
+    """
     count_files = ["count_file_1.tsv", "count_file_2.tsv"]
     annotation_files = ["annotation_file_1.tsv", "annotation_file_2.tsv"]
 
@@ -622,7 +721,7 @@ def splotchinputdata_inference() -> SplotchInputData:
         ),
     ]
 
-    for filename, count_df in zip(count_files, counts_dfs):
+    for filename, count_df in zip(count_files, counts_dfs, strict=True):
         count_df.columns = pd.MultiIndex.from_product(
             [[filename], count_df.columns], names=["file", "coordinate"]
         )
@@ -650,7 +749,7 @@ def splotchinputdata_inference() -> SplotchInputData:
         ),
     ]
 
-    for filename, annotation_df in zip(annotation_files, annotation_dfs):
+    for filename, annotation_df in zip(annotation_files, annotation_dfs, strict=True):
         annotation_df.columns = pd.MultiIndex.from_product(
             [[filename], annotation_df.columns], names=["file", "coordinate"]
         )
@@ -671,9 +770,13 @@ def splotchinputdata_inference() -> SplotchInputData:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def splotchinputdata_inference_2() -> SplotchInputData:
-    """SplotchInputData."""
+    """SplotchInputData.
+
+    Returns:
+        Processed input data.
+    """
     count_files = ["count_file_1.tsv", "count_file_2.tsv"]
     annotation_files = ["annotation_file_1.tsv", "annotation_file_2.tsv"]
 
@@ -705,7 +808,7 @@ def splotchinputdata_inference_2() -> SplotchInputData:
         ),
     ]
 
-    for filename, count_df in zip(count_files, counts_dfs):
+    for filename, count_df in zip(count_files, counts_dfs, strict=True):
         count_df.columns = pd.MultiIndex.from_product(
             [[filename], count_df.columns], names=["file", "coordinate"]
         )
@@ -733,7 +836,7 @@ def splotchinputdata_inference_2() -> SplotchInputData:
         ),
     ]
 
-    for filename, annotation_df in zip(annotation_files, annotation_dfs):
+    for filename, annotation_df in zip(annotation_files, annotation_dfs, strict=True):
         annotation_df.columns = pd.MultiIndex.from_product(
             [[filename], annotation_df.columns], names=["file", "coordinate"]
         )
@@ -754,9 +857,13 @@ def splotchinputdata_inference_2() -> SplotchInputData:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def splotchinputdata_inference_two_levels() -> SplotchInputData:
-    """SplotchInputData."""
+    """SplotchInputData.
+
+    Returns:
+        Processed input data.
+    """
     count_files = ["count_file_1.tsv", "count_file_2.tsv"]
     annotation_files = ["annotation_file_1.tsv", "annotation_file_2.tsv"]
 
@@ -789,7 +896,7 @@ def splotchinputdata_inference_two_levels() -> SplotchInputData:
         ),
     ]
 
-    for filename, count_df in zip(count_files, counts_dfs):
+    for filename, count_df in zip(count_files, counts_dfs, strict=True):
         count_df.columns = pd.MultiIndex.from_product(
             [[filename], count_df.columns], names=["file", "coordinate"]
         )
@@ -817,7 +924,7 @@ def splotchinputdata_inference_two_levels() -> SplotchInputData:
         ),
     ]
 
-    for filename, annotation_df in zip(annotation_files, annotation_dfs):
+    for filename, annotation_df in zip(annotation_files, annotation_dfs, strict=True):
         annotation_df.columns = pd.MultiIndex.from_product(
             [[filename], annotation_df.columns], names=["file", "coordinate"]
         )
@@ -838,9 +945,13 @@ def splotchinputdata_inference_two_levels() -> SplotchInputData:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def splotchinputdata_inference_three_levels() -> SplotchInputData:
-    """SplotchInputData."""
+    """SplotchInputData.
+
+    Returns:
+        Processed input data.
+    """
     count_files = ["count_file_1.tsv", "count_file_2.tsv"]
     annotation_files = ["annotation_file_1.tsv", "annotation_file_2.tsv"]
 
@@ -874,7 +985,7 @@ def splotchinputdata_inference_three_levels() -> SplotchInputData:
         ),
     ]
 
-    for filename, count_df in zip(count_files, counts_dfs):
+    for filename, count_df in zip(count_files, counts_dfs, strict=True):
         count_df.columns = pd.MultiIndex.from_product(
             [[filename], count_df.columns], names=["file", "coordinate"]
         )
@@ -902,7 +1013,7 @@ def splotchinputdata_inference_three_levels() -> SplotchInputData:
         ),
     ]
 
-    for filename, annotation_df in zip(annotation_files, annotation_dfs):
+    for filename, annotation_df in zip(annotation_files, annotation_dfs, strict=True):
         annotation_df.columns = pd.MultiIndex.from_product(
             [[filename], annotation_df.columns], names=["file", "coordinate"]
         )
@@ -923,9 +1034,13 @@ def splotchinputdata_inference_three_levels() -> SplotchInputData:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def splotchinputdata_inference_wout_images() -> SplotchInputData:
-    """SplotchInputData."""
+    """SplotchInputData.
+
+    Returns:
+        Processed input data.
+    """
     count_files = ["count_file_1.tsv", "count_file_2.tsv"]
     annotation_files = ["annotation_file_1.tsv", "annotation_file_2.tsv"]
 
@@ -956,7 +1071,7 @@ def splotchinputdata_inference_wout_images() -> SplotchInputData:
         ),
     ]
 
-    for filename, count_df in zip(count_files, counts_dfs):
+    for filename, count_df in zip(count_files, counts_dfs, strict=True):
         count_df.columns = pd.MultiIndex.from_product(
             [[filename], count_df.columns], names=["file", "coordinate"]
         )
@@ -984,7 +1099,7 @@ def splotchinputdata_inference_wout_images() -> SplotchInputData:
         ),
     ]
 
-    for filename, annotation_df in zip(annotation_files, annotation_dfs):
+    for filename, annotation_df in zip(annotation_files, annotation_dfs, strict=True):
         annotation_df.columns = pd.MultiIndex.from_product(
             [[filename], annotation_df.columns], names=["file", "coordinate"]
         )
@@ -1039,7 +1154,7 @@ def test_get_mcmc_summary(
     """Test get_mcmc_summary()."""
     input_shape = test_input
     output_shape = expected
-    posterior_samples = {"mu": np.ones(input_shape)}
+    posterior_samples: dict[str, Array] = {"mu": jnp.ones(input_shape)}
     summary_df = get_mcmc_summary(posterior_samples["mu"])
     assert isinstance(summary_df, pd.DataFrame)
     assert summary_df.shape == output_shape
@@ -1070,9 +1185,7 @@ def test_detect_tissue_sections(
     coordinates = request.getfixturevalue(test_input)
     tissue_sections = detect_tissue_sections(coordinates, 8)
     assert len(tissue_sections) == expected[0]
-    assert (
-        sum([len(tissue_section) for tissue_section in tissue_sections]) == expected[1]
-    )
+    assert sum(len(tissue_section) for tissue_section in tissue_sections) == expected[1]
 
 
 @pytest.mark.parametrize(
@@ -1089,7 +1202,7 @@ def test_detect_tissue_sections(
     ],
 )
 def test_separate_tissue_sections(
-    test_input: str,
+    test_input: tuple[str, int],
     expected: tuple[int, int],
     request: pytest.FixtureRequest,
 ) -> None:
@@ -1101,9 +1214,7 @@ def test_separate_tissue_sections(
         coordinates, tissue_sections, 8, max_num_spots_per_tissue_section, 0
     )
     assert len(tissue_sections) == expected[0]
-    assert (
-        sum([len(tissue_section) for tissue_section in tissue_sections]) == expected[1]
-    )
+    assert sum(len(tissue_section) for tissue_section in tissue_sections) == expected[1]
 
 
 @pytest.mark.parametrize(
@@ -1114,7 +1225,7 @@ def test_separate_tissue_sections(
     ],
 )
 def test_read_count_files(
-    test_input: str,
+    test_input: tuple[str, float],
     expected: tuple[int, int],
     request: pytest.FixtureRequest,
 ) -> None:
@@ -1157,14 +1268,14 @@ def test_read_annotation_files(
 )
 def test_read_annotation_files_invalid(
     test_input: str,
-    expected: tuple[Exception, str],
+    expected: tuple[type[Exception], str],
     request: pytest.FixtureRequest,
 ) -> None:
     """Test read_annotation_files() with invalid annotations files."""
     annotation_files = request.getfixturevalue(test_input)
     exception = expected[0]
     msg = expected[1]
-    with pytest.raises(exception, match=msg):  # type: ignore[call-overload]
+    with pytest.raises(exception, match=msg):
         read_annotation_files(annotation_files)
 
 
@@ -1188,7 +1299,13 @@ def test_read_annotation_files_invalid(
 )
 def test_spotdata(
     test_input: str,
-    expected: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, pd.DataFrame],
+    expected: tuple[
+        npt.NDArray[np.bytes_],
+        npt.NDArray[np.bytes_],
+        npt.NDArray[np.float64],
+        npt.NDArray[np.int64],
+        pd.DataFrame,
+    ],
     request: pytest.FixtureRequest,
 ) -> None:
     """Test SpotData."""
@@ -1247,7 +1364,7 @@ def test_spotdata(
 )
 def test_spotdata_invalid(
     test_input: str,
-    expected: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, pd.DataFrame],
+    expected: tuple[type[Exception], str],
     request: pytest.FixtureRequest,
 ) -> None:
     """Test SpotData with invalid data."""
@@ -1261,7 +1378,7 @@ def test_spotdata_invalid(
     ) = request.getfixturevalue(test_input)
     exception = expected[0]
     msg = expected[1]
-    with pytest.raises(exception, match=msg):  # type: ignore[call-overload]
+    with pytest.raises(exception, match=msg):
         SpotData(
             genes, level_values, metadata, coordinates_orig, spot_counts, annotations_df
         )
@@ -1273,7 +1390,8 @@ def test_spotdata_invalid(
         (
             (
                 np.asarray(
-                    [[0, 0], [1, 0], [0, 1], [1, 1], [3, 0], [4, 0], [3, 1], [4, 1]]
+                    [[0, 0], [1, 0], [0, 1], [1, 1], [3, 0], [4, 0], [3, 1], [4, 1]],
+                    dtype=np.float64,
                 ),
                 3,
             ),
@@ -1293,7 +1411,8 @@ def test_spotdata_invalid(
         (
             (
                 np.asarray(
-                    [[0, 0], [1, 0], [0, 1], [1, 1], [3, 0], [4, 0], [3, 1], [4, 1]]
+                    [[0, 0], [1, 0], [0, 1], [1, 1], [3, 0], [4, 0], [3, 1], [4, 1]],
+                    dtype=np.float64,
                 ),
                 2,
             ),
@@ -1313,7 +1432,7 @@ def test_spotdata_invalid(
     ],
 )
 def test_get_spot_adjacency_matrix(
-    test_input: tuple[np.ndarray, int], expected: np.ndarray
+    test_input: tuple[npt.NDArray[np.float64], int], expected: npt.NDArray[np.bool]
 ) -> None:
     """Test get_spot_adjacency_matrix."""
     coordinates, num_of_neighbors = test_input
@@ -1326,7 +1445,8 @@ def test_get_spot_adjacency_matrix(
         (
             (
                 np.asarray(
-                    [[0, 0], [1, 0], [0, 1], [1, 1], [3, 0], [4, 0], [3, 1], [4, 1]]
+                    [[0, 0], [1, 0], [0, 1], [1, 1], [3, 0], [4, 0], [3, 1], [4, 1]],
+                    dtype=np.float64,
                 ),
                 0,
             ),
@@ -1340,7 +1460,8 @@ def test_get_spot_adjacency_matrix(
         (
             (
                 np.asarray(
-                    [[0, 0], [1, 0], [0, 1], [1, 1], [3, 0], [4, 0], [3, 1], [4, 1]]
+                    [[0, 0], [1, 0], [0, 1], [1, 1], [3, 0], [4, 0], [3, 1], [4, 1]],
+                    dtype=np.float64,
                 ),
                 7,
             ),
@@ -1354,7 +1475,8 @@ def test_get_spot_adjacency_matrix(
     ],
 )
 def test_get_spot_adjacency_matrix_invalid(
-    test_input: tuple[np.ndarray, int], expected: np.ndarray
+    test_input: tuple[npt.NDArray[np.float64], int],
+    expected: tuple[type[Exception], str],
 ) -> None:
     """Test get_spot_adjacency_matrix with invalid num_of_neighbors."""
     coordinates, num_of_neighbors = test_input
@@ -1375,14 +1497,14 @@ def test_splotchinputdata(
     }
     assert splotch_input_data.num_aars() == annotations_df.shape[0]
     assert splotch_input_data.num_spots() == annotations_df.shape[1]
-    assert np.all(splotch_input_data.counts() == counts_df.values.T)
-    assert np.all(splotch_input_data.counts(["g1"]) == counts_df.values[[0], :].T)
+    assert np.all(splotch_input_data.counts() == counts_df.to_numpy().T)
+    assert np.all(splotch_input_data.counts(["g1"]) == counts_df.to_numpy()[[0], :].T)
     assert np.all(
-        splotch_input_data.annotations() == np.argmax(annotations_df.values, axis=0)
+        splotch_input_data.annotations() == np.argmax(annotations_df.to_numpy(), axis=0)
     )
     assert np.all(splotch_input_data.aars() == np.asarray(annotations_df.index))
     assert np.all(
-        (counts_df.sum(0) / counts_df.sum(0).median()).values
+        (counts_df.sum(0) / counts_df.sum(0).median()).to_numpy()
         == splotch_input_data.size_factors()
     )
 
@@ -1462,9 +1584,9 @@ def test_register(
     ["map", "vmap", "pmap"],
 )
 def test_run_nuts(
-    test_input: SplotchInputData,
-    map_method: str,
-    use_zero_inflated: bool,
+    test_input: str,
+    map_method: Literal["map", "vmap", "pmap"],
+    use_zero_inflated: bool,  # noqa: FBT001
     request: pytest.FixtureRequest,
 ) -> None:
     """Test run_nuts()."""
@@ -1541,9 +1663,9 @@ def test_run_nuts(
     ["map", "vmap", "pmap"],
 )
 def test_run_svi(
-    test_input: SplotchInputData,
-    map_method: str,
-    use_zero_inflated: bool,
+    test_input: str,
+    map_method: Literal["map", "vmap", "pmap"],
+    use_zero_inflated: bool,  # noqa: FBT001
     request: pytest.FixtureRequest,
 ) -> None:
     """Test run_svi()."""
@@ -1609,7 +1731,7 @@ def test_run_nuts_invalid_map_method(
             key_,
             ["g1"],
             splotchinputdata_inference,
-            map_method=map_method,
+            map_method=map_method,  # type: ignore[arg-type]
             num_warmup=10,
             num_samples=10,
             num_chains=4,
@@ -1628,7 +1750,7 @@ def test_run_svi_invalid_map_method(
             key_,
             ["g1"],
             splotchinputdata_inference,
-            map_method=map_method,
+            map_method=map_method,  # type: ignore[arg-type]
             num_steps=50,
             num_samples=10,
         )
@@ -1707,12 +1829,12 @@ def test_splotch_v1_invalid_number_of_levels(
     """Test splotch_v1() with invalid number of levels."""
     genes = ["g1"]
     model_kwargs = get_splotch_kwargs(
-        splotchinputdata_inference, get_default_priors, False
+        splotchinputdata_inference, get_default_priors(), use_zero_inflated=False
     ) | {"counts": jnp.asarray(splotchinputdata_inference.counts(genes))}
     model_kwargs["num_levels"] = 4
 
     with pytest.raises(ValueError, match="Only 1, 2, or 3 levels are supported"):
-        splotch_v1(**model_kwargs)
+        splotch_v1(**model_kwargs)  # type: ignore[arg-type]
 
 
 def test_visualization(

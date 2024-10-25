@@ -1,6 +1,8 @@
 """model.py."""
+
 import jax.numpy as jnp
 import numpy as np
+import numpy.typing as npt
 import numpyro
 import numpyro.distributions as dist
 from jax import Array
@@ -110,7 +112,7 @@ def gp(x: Array, L: Array, M: list[int], alpha: Array, length: Array) -> Array:
     spd = jnp.sqrt(diag_spectral_density(alpha, length, L, S))
     with numpyro.plate("basis", S.shape[0]):
         beta = numpyro.sample("beta", dist.Normal(0, 1))
-    return numpyro.deterministic("f", jnp.einsum("ijk,ik->ij", phi, spd * beta))  # type: ignore[no-any-return]
+    return numpyro.deterministic("f", jnp.einsum("ijk,ik->ij", phi, spd * beta))
 
 
 def splotch_v1(
@@ -118,12 +120,13 @@ def splotch_v1(
     num_aars: int,
     num_levels: int,
     num_categories_per_level: dict[str, int],
-    counts: np.ndarray,
-    annotations: np.ndarray,
-    padded_coordinates: np.ndarray,
-    valid_coordinates: np.ndarray,
-    levels: np.ndarray,
-    size_factors: np.ndarray,
+    counts: npt.NDArray[np.int32],
+    annotations: npt.NDArray[np.int64],
+    padded_coordinates: npt.NDArray[np.float64],
+    valid_coordinates: npt.NDArray[np.bool],
+    levels: npt.NDArray[np.int8],
+    size_factors: npt.NDArray[np.float64],
+    *,
     use_zero_inflated: bool,
     priors: dict[str, dist.Distribution],
 ) -> None:
@@ -142,6 +145,9 @@ def splotch_v1(
         size_factors: Size factor for each spot.
         priors: Prior distributions of `alpha`, `length`, `spot_sigma`, and `theta`.
         use_zero_inflated: Whether to use the zero-inflated Poisson likelihood.
+
+    Raises:
+        ValueError: num_levels not in {1, 2, 3}.
     """
     if num_levels not in {1, 2, 3}:
         msg = "Only 1, 2, or 3 levels are supported"
@@ -157,8 +163,9 @@ def splotch_v1(
 
     if num_levels > 1:
         sigma_level_2 = numpyro.sample("sigma_level_2", dist.HalfNormal(1))
-        with numpyro.plate("aar", num_aars), numpyro.plate(
-            "level_2", num_categories_per_level["level_2"]
+        with (
+            numpyro.plate("aar", num_aars),
+            numpyro.plate("level_2", num_categories_per_level["level_2"]),
         ):
             beta_level_2_raw = numpyro.sample("beta_level_2_raw", dist.Normal(0, 1))
             beta_level_2 = numpyro.deterministic(
@@ -167,8 +174,9 @@ def splotch_v1(
 
     if num_levels > 2:
         sigma_level_3 = numpyro.sample("sigma_level_3", dist.HalfNormal(1))
-        with numpyro.plate("aar", num_aars), numpyro.plate(
-            "level_3", num_categories_per_level["level_3"]
+        with (
+            numpyro.plate("aar", num_aars),
+            numpyro.plate("level_3", num_categories_per_level["level_3"]),
         ):
             beta_level_3_raw = numpyro.sample("beta_level_3_raw", dist.Normal(0, 1))
             beta_level_3 = numpyro.deterministic(
@@ -191,10 +199,8 @@ def splotch_v1(
             + beta_level_3[levels[:, 2], annotations],
         )
 
-    padded_coordinates = padded_coordinates - jnp.min(
-        padded_coordinates[valid_coordinates], axis=0
-    )
-    padded_coordinates = padded_coordinates - 0.5 * jnp.max(padded_coordinates, axis=0)
+    padded_coordinates -= jnp.min(padded_coordinates[valid_coordinates], axis=0)
+    padded_coordinates -= 0.5 * jnp.max(padded_coordinates, axis=0)
     num_basis = 5
     L = jnp.asarray([1.5 * jnp.max(padded_coordinates)])
     M = padded_coordinates.shape[-1] * [num_basis]

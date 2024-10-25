@@ -1,9 +1,11 @@
 """inference.py."""
+
 from functools import partial
-from typing import Any
+from typing import Any, Literal, TypeAlias
 
 import jax.numpy as jnp
 import numpy as np
+import numpy.typing as npt
 import numpyro.distributions as dist
 import pandas as pd
 from jax import Array, jit, pmap, random, vmap
@@ -21,14 +23,14 @@ from splotch.dataclasses import SplotchInputData, SplotchResult
 from splotch.models import get_default_priors, splotch_v1
 from splotch.utils import get_mcmc_summary
 
-KeyArray = Array
+KeyArray: TypeAlias = Array
 
 # ruff: noqa: PLR0913, PLR0917
 
 
 def get_padded_coordinates(
     splotch_input_data: SplotchInputData,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Get padded coordinates.
 
     Args:
@@ -39,12 +41,12 @@ def get_padded_coordinates(
     """
     tissue_sections = splotch_input_data.metadata.index.get_level_values(
         "tissue_section"
-    ).values
+    ).to_numpy()
     coordinates = np.split(
         np.vstack(
             (
-                splotch_input_data.metadata.x.values,
-                splotch_input_data.metadata.y.values,
+                splotch_input_data.metadata.x.to_numpy(),
+                splotch_input_data.metadata.y.to_numpy(),
             )
         ).T,
         np.where(tissue_sections[:-1] != tissue_sections[1:])[0] + 1,
@@ -82,8 +84,17 @@ def get_padded_coordinates(
 def get_splotch_kwargs(
     splotch_input_data: SplotchInputData,
     priors: dict[str, dist.Distribution],
+    *,
     use_zero_inflated: bool,
-) -> dict[str, int | np.ndarray | bool | dict[str, int]]:
+) -> dict[
+    str,
+    int
+    | npt.NDArray[np.float64]
+    | npt.NDArray[np.int8]
+    | npt.NDArray[np.int64]
+    | bool
+    | dict[str, int],
+]:
     """Return.
 
     Args:
@@ -122,11 +133,12 @@ def run_nuts(
     key: Array,
     genes: list[str],
     splotch_input_data: SplotchInputData,
-    map_method: str = "map",
+    map_method: Literal["map", "pmap", "vmap"] = "map",
     num_warmup: int = 1_000,
     num_samples: int = 1_000,
     num_chains: int = 4,
     priors: dict[str, dist.Distribution] | None = None,
+    *,
     use_zero_inflated: bool = False,
 ) -> SplotchResult:
     """Run NUTS.
@@ -144,6 +156,9 @@ def run_nuts(
 
     Returns:
         SplotchResult object.
+
+    Raises:
+        ValueError: map_method is not pmap, vmap or map.
     """
 
     def get_model_kwargs(model_kwargs: dict[str, Any], counts: Array) -> dict[str, Any]:
@@ -151,7 +166,9 @@ def run_nuts(
 
     priors = get_default_priors() | (priors if priors is not None else {})
 
-    model_kwargs = get_splotch_kwargs(splotch_input_data, priors, use_zero_inflated)
+    model_kwargs = get_splotch_kwargs(
+        splotch_input_data, priors, use_zero_inflated=use_zero_inflated
+    )
 
     counts = jnp.asarray(splotch_input_data.counts(genes))
 
@@ -227,7 +244,7 @@ def run_nuts(
             gene_res.append(tree_map(lambda *x: jnp.stack(x), *chain_res))
         samples = tree_map(lambda *x: jnp.stack(x), *gene_res)
     else:
-        msg = "map_method should be pmap, vmap or map"
+        msg = "map_method should be pmap, vmap or map"  # type: ignore[unreachable]
         raise ValueError(msg)
 
     def get_summaries(samples: Array) -> pd.DataFrame:
@@ -236,7 +253,7 @@ def run_nuts(
             .assign(gene=gene)
             .reset_index()
             .set_index(["gene", "index"])
-            for gene, sample in zip(genes, samples)
+            for gene, sample in zip(genes, samples, strict=True)
         ]
         return pd.concat(summary_dfs, axis=0)
 
@@ -262,13 +279,14 @@ def run_svi(
     key: KeyArray,
     genes: list[str],
     splotch_input_data: SplotchInputData,
-    map_method: str = "map",
+    map_method: Literal["map", "pmap", "vmap"] = "map",
     guide: AutoGuide | None = None,
     optim: _NumPyroOptim | None = None,
     loss: ELBO | None = None,
     num_steps: int = 10_000,
     num_samples: int = 1_000,
     priors: dict[str, dist.Distribution] | None = None,
+    *,
     use_zero_inflated: bool = False,
 ) -> SplotchResult:
     """Run SVI.
@@ -288,6 +306,9 @@ def run_svi(
 
     Returns:
         SplotchResult object.
+
+    Raises:
+        ValueError: map_method is not pmap, vmap or map.
     """
     guide = guide or AutoNormal(splotch_v1)
     optim = optim or Adam(step_size=0.1)
@@ -295,7 +316,9 @@ def run_svi(
 
     priors = get_default_priors() | (priors if priors is not None else {})
 
-    model_kwargs = get_splotch_kwargs(splotch_input_data, priors, use_zero_inflated)
+    model_kwargs = get_splotch_kwargs(
+        splotch_input_data, priors, use_zero_inflated=use_zero_inflated
+    )
     counts = np.asarray(splotch_input_data.counts(genes))
 
     def run_svi(key: KeyArray, counts: Array) -> tuple[dict[str, Array], Array, Array]:
@@ -313,7 +336,7 @@ def run_svi(
         samples = guide.sample_posterior(
             key_,
             params,
-            (num_samples,),
+            sample_shape=(num_samples,),
         )
         return samples, params, losses
 
@@ -329,11 +352,11 @@ def run_svi(
     elif map_method == "map":
         gene_res = []
         keys = random.split(key_, len(genes))
-        for gene_idx, key_ in zip(range(len(genes)), keys):
+        for gene_idx, key_ in zip(range(len(genes)), keys, strict=True):
             gene_res.append(jit(run_svi)(key_, counts[:, gene_idx]))
         samples, params, losses = tree_map(lambda *x: jnp.stack(x), *gene_res)
     else:
-        msg = "map_method should be pmap, vmap or map"
+        msg = "map_method should be pmap, vmap or map"  # type: ignore[unreachable]
         raise ValueError(msg)
 
     return SplotchResult(

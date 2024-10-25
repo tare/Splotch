@@ -1,10 +1,12 @@
 """dataclasses.py."""
+
 import logging
 from dataclasses import dataclass
 from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 from jax import Array
 from jax.tree_util import tree_map
@@ -35,11 +37,19 @@ class SplotchInputData:
         self.metadata["aar"] = self.annotation_data.columns[self.annotations()]
 
     def num_levels(self) -> int:
-        """Get number of levels."""
+        """Get number of levels.
+
+        Returns:
+            Number of levels.
+        """
         return len([col for col in self.metadata.columns if col.startswith("level_")])
 
     def num_categories_per_level(self) -> dict[str, int]:
-        """Get number of categories per level."""
+        """Get number of categories per level.
+
+        Returns:
+            Number of categories per level.
+        """
         return {
             col: self.metadata[col].cat.codes.max() + 1
             for col in self.metadata.columns
@@ -47,48 +57,72 @@ class SplotchInputData:
         }
 
     def num_aars(self) -> int:
-        """Get number of AARs."""
-        return self.annotation_data.shape[1]  # type: ignore[no-any-return]
+        """Get number of AARs.
+
+        Returns:
+            Number of AARs.
+        """
+        return self.annotation_data.shape[1]
 
     def num_spots(self) -> int:
-        """Get number of spots."""
-        return self.count_data.shape[0]  # type: ignore[no-any-return]
+        """Get number of spots.
 
-    def counts(self, genes: list[str] | None = None) -> np.ndarray:
+        Returns:
+            Number of spots.
+        """
+        return self.count_data.shape[0]
+
+    def counts(self, genes: list[str] | None = None) -> npt.NDArray[np.int64]:
         """Get counts matrix.
 
         Args:
-            genes: TBA.
+            genes: List of genes of interest. If none, then consider all genes.
 
         Returns:
             Count matrix.
         """
-        return (  # type: ignore[no-any-return]
-            self.count_data.values
+        return (
+            self.count_data.to_numpy()
             if genes is None
-            else self.count_data.loc[:, genes].values
+            else self.count_data.loc[:, genes].to_numpy()
         )
 
-    def annotations(self) -> np.ndarray:
-        """Get annotations."""
-        return np.argmax(self.annotation_data.values, axis=1)  # type: ignore[no-any-return]
+    def annotations(self) -> npt.NDArray[np.int64]:
+        """Get annotations.
 
-    def levels(self) -> np.ndarray:
-        """Get levels."""
+        Returns:
+            Annotations.
+        """
+        return np.argmax(self.annotation_data.to_numpy(), axis=1)
+
+    def levels(self) -> npt.NDArray[np.int8]:
+        """Get levels.
+
+        Returns:
+            Levels.
+        """
         return np.hstack(
             [
-                self.metadata[f"level_{idx+1}"].cat.codes.values[:, None]
+                self.metadata[f"level_{idx+1}"].cat.codes.to_numpy()[:, None]
                 for idx in range(self.num_levels())
             ]
         )
 
-    def aars(self) -> np.ndarray:
-        """Get AARs."""
-        return self.annotation_data.columns.values  # type: ignore[no-any-return]
+    def aars(self) -> npt.NDArray[np.bytes_]:
+        """Get AARs.
 
-    def size_factors(self) -> np.ndarray:
-        """Get size factors."""
-        return self.metadata.size_factor.values  # type: ignore[no-any-return]
+        Returns:
+            AARs.
+        """
+        return self.annotation_data.columns.to_numpy()
+
+    def size_factors(self) -> npt.NDArray[np.float64]:
+        """Get size factors.
+
+        Returns:
+            Size factors.
+        """
+        return self.metadata.size_factor.to_numpy()
 
 
 @dataclass
@@ -127,7 +161,16 @@ class SplotchResult:
         )
 
     def __add__(self, other: "SplotchResult") -> "SplotchResult":
-        """Combine two SplotchResult objects."""
+        """Combine two SplotchResult objects.
+
+        Raises:
+            ValueError: Mismatching metadata.
+            ValueError: Genes overlap.
+            ValueError: Mismatching inference methods.
+
+        Returns:
+            Combined SplotchResult.
+        """
         if not self.metadata.equals(other.metadata):
             msg = "Metadata are not the same"
             raise ValueError(msg)
@@ -184,12 +227,18 @@ class SpotData:
     genes: list[str]
     level_values: pd.Series
     metadata: pd.Series
-    coordinates_orig: np.ndarray  # type: ignore[type-arg]
-    spot_counts: np.ndarray  # type: ignore[type-arg]
+    coordinates_orig: npt.NDArray[np.bytes_]
+    spot_counts: npt.NDArray[np.int64]
     annotations_df: pd.DataFrame
 
     def __post_init__(self) -> None:
-        """Post init steps."""
+        """Post init steps.
+
+        Raises:
+            ValueError: Invalid coordinates.
+            ValueError: Number of genes do not match.
+            ValueError: Number of coordinates do not match.
+        """
         self.coordinates = np.asarray(
             [
                 [float(val) for val in coordinate.split("_")]
@@ -227,8 +276,12 @@ class SpotData:
         self.spot_counts = self.spot_counts[indices, :]
         self.total_counts = self.total_counts[indices]
 
-    def select(self, indices: np.ndarray) -> "SpotData":
-        """Return object with selected values."""
+    def select(self, indices: npt.NDArray[np.bool]) -> "SpotData":
+        """Return object with selected values.
+
+        Returns:
+            Selected SpotData.
+        """
         return SpotData(
             self.genes,
             self.level_values,
@@ -239,5 +292,9 @@ class SpotData:
         )
 
     def __len__(self) -> int:
-        """Get the number of spots."""
+        """Get the number of spots.
+
+        Returns:
+            Number of spots.
+        """
         return len(self.coordinates_orig)
