@@ -388,7 +388,7 @@ def get_input_data(
         max_num_spots_per_tissue_section: Maximum number of spots per tissue sections.
             Tissue sections with more than this many spots are assumed to be overlapping.
             Only used when `separate_overlapping_tissue_section = True`. Defaults to 120.
-        min_num_spots_per_tissue_section: TBA. Minimum number of spots per tissue sections.
+        min_num_spots_per_tissue_section: Minimum number of spots per tissue sections.
             Tissue section with less than this many spots are discarded. Defaults to 10.
         separate_overlapping_tissue_sections: Whether to separate overlapping tissue sections. Defaults to True.
         seed: Random seed. This is used to initialize the tissue section separation.
