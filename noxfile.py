@@ -5,7 +5,7 @@ import nox
 nox.options.default_venv_backend = "uv"
 
 
-@nox.session(python=["3.10", "3.11", "3.12"])
+@nox.session(python=["3.10", "3.11", "3.12", "3.10"])
 def tests(session: nox.Session) -> None:
     """Test session."""
     session.install("pytest~=8.3", "pytest-cov~=5.0")
