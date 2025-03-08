@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "splotch-st"
-version = "1.0.0"
+version = "1.0.1"
 description = "Splotch is a hierarchical generative probabilistic model for analyzing Spatial Transcriptomics (ST) data"
 authors = [
     "Tarmo Äijö <tarmo.aijo@gmail.com>",
@@ -28,17 +28,17 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.10"
-numpyro = "^0.15"
-jax = "<=0.4.30"
-jaxlib = "<=0.4.30"
-matplotlib = "^3.8.1"
-jupyterlab = {version = "^4.0.8", optional = true}
-scipy = "^1.14"
-ipywidgets = {version = "^8.1.1", optional = true}
-pandas = "^2"
-funsor = "^0.4"
-pillow = "^10.1"
-networkx = "^3.2"
+numpyro = ">=0.15"
+jax = ">=0.4.30"
+jaxlib = ">=0.4.30"
+matplotlib = ">=3.8"
+jupyterlab = {version = ">=4", optional = true}
+scipy = ">=1.14"
+ipywidgets = {version = ">=8", optional = true}
+pandas = ">=2"
+funsor = ">=0.4"
+pillow = ">=10"
+networkx = ">=3.2"
 
 [tool.poetry.extras]
 examples = ["jupyterlab", "ipywidgets"]
