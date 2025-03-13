@@ -33,11 +33,11 @@ jax = ">=0.4.30"
 jaxlib = ">=0.4.30"
 matplotlib = ">=3.8"
 jupyterlab = {version = ">=4", optional = true}
-scipy = ">=1.14"
+scipy = ">=1.15"
 ipywidgets = {version = ">=8", optional = true}
-pandas = ">=2"
+pandas = ">=2.2.3"
 funsor = ">=0.4"
-pillow = ">=10"
+pillow = ">=11"
 networkx = ">=3.2"
 
 [tool.poetry.extras]
@@ -60,7 +60,7 @@ ipykernel = "^6.29.5"
 [tool.ruff]
 target-version = "py310"
 fix = true
-exclude = ["LuxRep/"]
+exclude = []
 force-exclude = true
 
 [tool.ruff.lint]
