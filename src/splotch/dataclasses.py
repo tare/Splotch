@@ -276,7 +276,7 @@ class SpotData:
         self.spot_counts = self.spot_counts[indices, :]
         self.total_counts = self.total_counts[indices]
 
-    def select(self, indices: npt.NDArray[np.bool]) -> "SpotData":
+    def select(self, indices: npt.NDArray[np.bool_]) -> "SpotData":
         """Return object with selected values.
 
         Returns:

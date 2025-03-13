@@ -463,7 +463,7 @@ def savagedickey(
 
 def get_spot_adjacency_matrix(
     coordinates: npt.NDArray[np.float64], num_of_neighbors: int
-) -> npt.NDArray[np.bool]:
+) -> npt.NDArray[np.bool_]:
     """Get spot adjacency matrix.
 
     num_of_neighbors has to be between 1 and number of coordinates - 2.
@@ -566,7 +566,7 @@ def separate_tissue_sections(
 
 def separate_tissue_section(
     tissue_section: set[int],
-    adjacency_matrix: npt.NDArray[np.bool],
+    adjacency_matrix: npt.NDArray[np.bool_],
     seed: int = 0,
 ) -> list[set[int]]:
     """Separate overlapping tissue sections.

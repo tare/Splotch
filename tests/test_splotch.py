@@ -1432,7 +1432,7 @@ def test_spotdata_invalid(
     ],
 )
 def test_get_spot_adjacency_matrix(
-    test_input: tuple[npt.NDArray[np.float64], int], expected: npt.NDArray[np.bool]
+    test_input: tuple[npt.NDArray[np.float64], int], expected: npt.NDArray[np.bool_]
 ) -> None:
     """Test get_spot_adjacency_matrix."""
     coordinates, num_of_neighbors = test_input

@@ -123,7 +123,7 @@ def splotch_v1(
     counts: npt.NDArray[np.int32],
     annotations: npt.NDArray[np.int64],
     padded_coordinates: npt.NDArray[np.float64],
-    valid_coordinates: npt.NDArray[np.bool],
+    valid_coordinates: npt.NDArray[np.bool_],
     levels: npt.NDArray[np.int8],
     size_factors: npt.NDArray[np.float64],
     *,
