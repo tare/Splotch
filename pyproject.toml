@@ -31,7 +31,10 @@ python = "^3.10"
 numpyro = ">=0.15"
 jax = ">=0.4.30"
 jaxlib = ">=0.4.30"
-matplotlib = ">=3.8"
+matplotlib = [
+    {version = ">=3.9.2", python = ">=3.13"},
+    {version = ">=3.8", python = "<3.13"}
+]
 jupyterlab = {version = ">=4", optional = true}
 scipy = ">=1.15"
 ipywidgets = {version = ">=8", optional = true}
